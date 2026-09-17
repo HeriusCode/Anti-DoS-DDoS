@@ -27,6 +27,7 @@ public final class Dashboard extends BorderPane {
     private final List<Node> menuItems = new ArrayList<>();
     private final Node dashboardPage;
     private final Node serverInfoPage;
+    private final Node trafficMonitorPage;
     private double dragOffsetX;
     private double dragOffsetY;
 
@@ -34,6 +35,7 @@ public final class Dashboard extends BorderPane {
         this.controller = controller;
         this.dashboardPage = createContent();
         this.serverInfoPage = new ServerInfoPage(controller);
+        this.trafficMonitorPage = new TrafficMonitorPage(controller);
         getStyleClass().add("dashboard-root");
         setTop(createHeader());
         setLeft(createSidebar());
@@ -107,7 +109,7 @@ public final class Dashboard extends BorderPane {
         Node settings = menuItem("fas-cog", "Settings", "Configuration", false);
         dashboard.setOnMouseClicked(event -> showPage(dashboardPage, dashboard));
         serverInfo.setOnMouseClicked(event -> showPage(serverInfoPage, serverInfo));
-        traffic.setOnMouseClicked(event -> showPage(dashboardPage, traffic));
+        traffic.setOnMouseClicked(event -> showPage(trafficMonitorPage, traffic));
         detection.setOnMouseClicked(event -> showPage(dashboardPage, detection));
         protection.setOnMouseClicked(event -> showPage(dashboardPage, protection));
         logs.setOnMouseClicked(event -> showPage(dashboardPage, logs));
