@@ -303,29 +303,37 @@
 .rule-ok { -fx-font-size: 10px; -fx-text-fill: #28d7cb; }
 .status-icon { -fx-icon-size: 11px; -fx-icon-color: #00e8ba; }
 .toggle-label { -fx-text-fill: #82c7e9; -fx-font-size: 10px; }
-.switch-control {
-    -fx-min-width: 34px;
-    -fx-pref-width: 34px;
-    -fx-max-width: 34px;
-    -fx-min-height: 18px;
-    -fx-pref-height: 18px;
-    -fx-max-height: 18px;
-    -fx-padding: 2px;
-    -fx-alignment: center-left;
+/* ControlsFX ToggleSwitch used by every protection setting. */
+.protection-toggle-switch {
+    -fx-min-width: 38px;
+    -fx-pref-width: 38px;
+    -fx-max-width: 38px;
+    -fx-min-height: 20px;
+    -fx-pref-height: 20px;
+    -fx-max-height: 20px;
+    -fx-padding: 0;
+}
+.protection-toggle-switch .thumb-area {
     -fx-background-color: #18394a;
     -fx-background-radius: 10px;
     -fx-border-color: #20718b;
     -fx-border-radius: 10px;
     -fx-border-width: 1px;
+    -fx-padding: 5px 14px 5px 14px;
 }
-.switch-control:on {
+.protection-toggle-switch:selected .thumb-area {
     -fx-background-color: #00a98f;
     -fx-border-color: #00e3c3;
     -fx-effect: dropshadow(gaussian, rgba(0, 233, 204, .32), 7, .25, 0, 0);
 }
-.switch-control:hover { -fx-cursor: hand; -fx-effect: dropshadow(gaussian, rgba(0, 233, 204, .45), 7, .2, 0, 0); }
-.switch-knob { -fx-fill: #d9fbff; -fx-translate-x: -7px; }
-.switch-control:on .switch-knob { -fx-translate-x: 7px; }
+.protection-toggle-switch .thumb {
+    -fx-background-color: #d9fbff;
+    -fx-background-radius: 50%;
+    -fx-padding: 5px;
+}
+.protection-toggle-switch:hover .thumb-area {
+    -fx-effect: dropshadow(gaussian, rgba(0, 233, 204, .45), 7, .2, 0, 0);
+}
 .blocked-client { -fx-text-fill: #ff5574; -fx-font-size: 10px; }
 
 .summary-item {

@@ -23,6 +23,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import org.controlsfx.control.ToggleSwitch;
 import server.controller.DashboardController;
 import server.detection.AttackStatus;
 import server.model.ClientInfo;
@@ -309,7 +310,9 @@ public final class MonitorPanel extends VBox {
      * A dedicated slider control, deliberately not a Button: click or drag the thumb to change state.
      */
     private ToggleSwitch switchControl(ObservableBooleanValue value, Consumer<Boolean> update) {
-        ToggleSwitch slider = new ToggleSwitch(value.get());
+        ToggleSwitch slider = new ToggleSwitch();
+        slider.setSelected(value.get());
+        slider.getStyleClass().add("protection-toggle-switch");
         slider.selectedProperty().addListener((observable, oldValue, enabled) -> update.accept(enabled));
         value.addListener((observable, oldValue, enabled) -> slider.setSelected(enabled));
         return slider;

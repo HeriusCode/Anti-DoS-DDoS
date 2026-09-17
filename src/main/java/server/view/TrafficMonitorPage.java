@@ -26,6 +26,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
+import org.controlsfx.control.ToggleSwitch;
 import server.controller.DashboardController;
 import server.detection.AttackStatus;
 import server.model.ClientInfo;
@@ -317,7 +318,9 @@ public final class TrafficMonitorPage extends VBox {
         label.getStyleClass().add("toggle-label");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        ToggleSwitch toggle = new ToggleSwitch(value.get());
+        ToggleSwitch toggle = new ToggleSwitch();
+        toggle.setSelected(value.get());
+        toggle.getStyleClass().add("protection-toggle-switch");
         toggle.selectedProperty().addListener((observable, oldValue, enabled) -> setter.accept(enabled));
         value.addListener((observable, oldValue, enabled) -> toggle.setSelected(enabled));
         HBox row = new HBox(5, label, spacer, toggle);
