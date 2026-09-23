@@ -10,7 +10,6 @@ import server.config.ServerConfig;
 import server.controller.DashboardController;
 import server.view.Dashboard;
 
-/** Entry point for the Machine 2 JavaFX dashboard. */
 public final class Main extends Application {
     private DashboardController controller;
 

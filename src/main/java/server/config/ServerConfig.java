@@ -2,10 +2,6 @@ package server.config;
 
 import java.time.Duration;
 
-/**
- * Central configuration shared by the server, detector, protection modules and UI.
- * Values are mutable so a future Settings screen can apply changes at runtime.
- */
 public final class ServerConfig {
     private volatile int serverPort;
     private volatile int requestRateThreshold;

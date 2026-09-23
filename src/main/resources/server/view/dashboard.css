@@ -66,13 +66,19 @@
     -fx-background-color: transparent;
     -fx-background-radius: 0;
     -fx-border-color: transparent;
-    -fx-padding: 8 12 8 12;
-    -fx-min-width: 40px;
+    -fx-padding: 0;
+    -fx-min-width: 38px;
+    -fx-pref-width: 38px;
+    -fx-max-width: 38px;
+    -fx-min-height: 40px;
+    -fx-pref-height: 40px;
+    -fx-max-height: 40px;
+    -fx-alignment: center;
 }
 
 .window-button:hover { -fx-background-color: rgba(0, 208, 231, .16); }
 .close-window-button:hover { -fx-background-color: #c42b4c; }
-.window-icon { -fx-icon-size: 14px; -fx-icon-color: #00e8ed; }
+.window-icon { -fx-icon-size: 13px; -fx-icon-color: #00e8ed; }
 .close-window-button:hover .window-icon { -fx-icon-color: white; }
 
 .sidebar {

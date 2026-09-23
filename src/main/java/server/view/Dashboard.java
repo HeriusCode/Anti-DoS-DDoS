@@ -68,7 +68,7 @@ public final class Dashboard extends BorderPane {
                 LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE), "   ", controller.clockProperty()));
         clock.getStyleClass().add("header-clock");
 
-        Button minimize = windowButton("far-window-minimize", "Minimize");
+        Button minimize = windowButton("fas-minus", "Minimize");
         minimize.setOnAction(event -> currentStage().setIconified(true));
         Button maximize = windowButton("far-window-maximize", "Maximize / Restore");
         maximize.setOnAction(event -> currentStage().setMaximized(!currentStage().isMaximized()));
