@@ -28,6 +28,10 @@ public final class Dashboard extends BorderPane {
     private final Node dashboardPage;
     private final Node serverInfoPage;
     private final Node trafficMonitorPage;
+    private final Node detectionPage;
+    private final Node protectionPage;
+    private final Node logsPage;
+    private final Node settingsPage;
     private double dragOffsetX;
     private double dragOffsetY;
 
@@ -36,6 +40,10 @@ public final class Dashboard extends BorderPane {
         this.dashboardPage = createContent();
         this.serverInfoPage = new ServerInfoPage(controller);
         this.trafficMonitorPage = new TrafficMonitorPage(controller);
+        this.detectionPage = new DetectionPage(controller);
+        this.protectionPage = new ProtectionPage(controller);
+        this.logsPage = new LogsPage(controller);
+        this.settingsPage = new SettingsPage(controller);
         getStyleClass().add("dashboard-root");
         setTop(createHeader());
         setLeft(createSidebar());
@@ -110,10 +118,10 @@ public final class Dashboard extends BorderPane {
         dashboard.setOnMouseClicked(event -> showPage(dashboardPage, dashboard));
         serverInfo.setOnMouseClicked(event -> showPage(serverInfoPage, serverInfo));
         traffic.setOnMouseClicked(event -> showPage(trafficMonitorPage, traffic));
-        detection.setOnMouseClicked(event -> showPage(dashboardPage, detection));
-        protection.setOnMouseClicked(event -> showPage(dashboardPage, protection));
-        logs.setOnMouseClicked(event -> showPage(dashboardPage, logs));
-        settings.setOnMouseClicked(event -> showPage(dashboardPage, settings));
+        detection.setOnMouseClicked(event -> showPage(detectionPage, detection));
+        protection.setOnMouseClicked(event -> showPage(protectionPage, protection));
+        logs.setOnMouseClicked(event -> showPage(logsPage, logs));
+        settings.setOnMouseClicked(event -> showPage(settingsPage, settings));
         VBox menu = new VBox(2, dashboard, serverInfo, traffic, detection, protection, logs, settings);
 
         Node shield = UiIcons.icon("fas-shield-alt", "sidebar-shield");
