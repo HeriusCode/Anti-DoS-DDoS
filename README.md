@@ -4,7 +4,7 @@
 
 ## Yêu cầu
 
-- JDK 23
+- JDK 25
 - Apache Maven 3.9+
 
 ## Chạy Dashboard
