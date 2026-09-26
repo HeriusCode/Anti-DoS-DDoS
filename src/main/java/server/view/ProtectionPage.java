@@ -221,7 +221,8 @@ public final class ProtectionPage extends VBox {
         NumberAxis x = new NumberAxis();
         x.setTickLabelsVisible(false);
         x.setMinorTickVisible(false);
-        NumberAxis y = new NumberAxis(0, 200, 50);
+        NumberAxis y = new NumberAxis();
+        y.setForceZeroInRange(true);
         LineChart<Number, Number> chart = new LineChart<>(x, y);
         chart.setAnimated(false);
         chart.setCreateSymbols(true);
@@ -233,7 +234,7 @@ public final class ProtectionPage extends VBox {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox legend = new HBox(12, spacer, legend("Total Requests", "protection-total-line"),
                 legend("Allowed", "protection-allowed-line"), legend("Limited", "protection-limited-line"),
-                legend("Blocked", "protection-blocked-line"));
+                legend("Blocked / Dropped", "protection-blocked-line"));
         VBox panel = panel(5, sectionHeader("fas-stopwatch", "TRAFFIC & PROTECTION STATUS"), legend, chart);
         panel.setPrefWidth(700);
         panel.setMinWidth(520);
@@ -370,18 +371,11 @@ public final class ProtectionPage extends VBox {
         allowedSeries.getData().clear();
         limitedSeries.getData().clear();
         blockedSeries.getData().clear();
-        int limit = controller.getConfig().getRateLimit();
-        int threshold = controller.getConfig().getRequestRateThreshold();
         for (DashboardController.ChartPoint point : controller.getChartPoints()) {
-            int total = point.requestsPerSecond();
-            int allowed = controller.rateLimitActiveProperty().get() ? Math.min(total, limit) : total;
-            int limited = Math.max(0, total - allowed);
-            int blocked = controller.blockingActiveProperty().get() && total >= threshold
-                    ? Math.max(0, (total - threshold) / 3) : 0;
-            totalSeries.getData().add(new XYChart.Data<>(point.index(), total));
-            allowedSeries.getData().add(new XYChart.Data<>(point.index(), allowed));
-            limitedSeries.getData().add(new XYChart.Data<>(point.index(), limited));
-            blockedSeries.getData().add(new XYChart.Data<>(point.index(), blocked));
+            totalSeries.getData().add(new XYChart.Data<>(point.index(), point.requestsPerSecond()));
+            allowedSeries.getData().add(new XYChart.Data<>(point.index(), point.allowedRequestsPerSecond()));
+            limitedSeries.getData().add(new XYChart.Data<>(point.index(), point.limitedRequestsPerSecond()));
+            blockedSeries.getData().add(new XYChart.Data<>(point.index(), point.droppedRequestsPerSecond()));
         }
     }
 

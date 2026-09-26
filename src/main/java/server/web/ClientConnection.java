@@ -16,12 +16,15 @@ public final class ClientConnection implements Runnable {
     private final Socket socket;
     private final HttpRequestHandler handler;
     private final WebServer.Observer observer;
+    private final Runnable onClosed;
     private final String clientIp;
 
-    public ClientConnection(Socket socket, HttpRequestHandler handler, WebServer.Observer observer) {
+    public ClientConnection(Socket socket, HttpRequestHandler handler, WebServer.Observer observer,
+                            Runnable onClosed) {
         this.socket = socket;
         this.handler = handler;
         this.observer = observer;
+        this.onClosed = onClosed;
         this.clientIp = socket.getInetAddress().getHostAddress();
     }
 
@@ -64,6 +67,7 @@ public final class ClientConnection implements Runnable {
             if (requestReceived) {
                 observer.onRequestCompleted(clientIp, method, target, statusCode, elapsed);
             }
+            onClosed.run();
             observer.onConnectionClosed(clientIp);
         }
     }

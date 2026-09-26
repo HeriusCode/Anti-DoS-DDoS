@@ -45,7 +45,7 @@ public final class TrafficMonitor {
         requestTimes.addLast(now);
         if (statusCode >= 200 && statusCode < 400) {
             successfulRequests.increment();
-        } else {
+        } else if (statusCode != 429 && statusCode != 503) {
             failedRequests.increment();
         }
 
