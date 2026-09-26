@@ -1,10 +1,20 @@
 package server.web;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Random;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Handles the small set of HTTP GET endpoints used by the controlled lab. */
 public final class HttpRequestHandler {
+    // A bounded, CPU-backed analytics workload for the private lab page. One report
+    // is calculated at a time, like a small server with one analytics worker.
+    private static final int ANALYTICS_SAMPLES = 600_000;
     private final String serverName;
+    private final int[] trafficSamples = createTrafficSamples();
+    private final Semaphore analyticsWorker = new Semaphore(1, true);
+    private final AtomicLong reportsGenerated = new AtomicLong();
 
     public HttpRequestHandler(String serverName) {
         this.serverName = serverName;
@@ -24,6 +34,27 @@ public final class HttpRequestHandler {
     }
 
     private HttpResponse htmlPage() {
+        long reportNumber;
+        int median;
+        int p95;
+        int p99;
+        try {
+            analyticsWorker.acquire();
+            try {
+                reportNumber = reportsGenerated.incrementAndGet();
+                int[] report = trafficSamples.clone();
+                report[(int) (reportNumber % report.length)] = (int) (reportNumber % 1_000);
+                Arrays.sort(report);
+                median = report[report.length / 2];
+                p95 = report[(int) (report.length * .95)];
+                p99 = report[(int) (report.length * .99)];
+            } finally {
+                analyticsWorker.release();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return text(503, "Service Unavailable", "Analytics worker is stopping.");
+        }
         String html = """
                 <!doctype html>
                 <html lang="en">
@@ -39,17 +70,40 @@ public final class HttpRequestHandler {
                     h1{margin:0 0 14px;color:#10e4ea;font-size:32px}.status{display:inline-block;padding:7px 14px;
                     border:1px solid #00d0a8;border-radius:20px;color:#00efc4;background:#003d38;font-weight:700}
                     p{line-height:1.6;color:#9ccce8}.meta{margin-top:26px;padding-top:18px;border-top:1px solid #12617e}
+                    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}
+                    .metric{padding:14px;border:1px solid #12617e;border-radius:8px;background:#062338}
+                    .metric b{display:block;color:#10e4ea;font-size:22px}.metric span{font-size:12px;color:#9ccce8}
                   </style>
                 </head>
                 <body><main class="card"><span class="status">SERVER RUNNING</span>
                   <h1>DoS/DDoS Protection Lab Server</h1>
                   <p>The Java TCP/HTTP server on Machine 2 is running and accepting controlled LAN requests.</p>
+                  <div class="metrics">
+                    <div class="metric"><b>${MEDIAN}</b><span>Median sample</span></div>
+                    <div class="metric"><b>${P95}</b><span>95th percentile</span></div>
+                    <div class="metric"><b>${P99}</b><span>99th percentile</span></div>
+                  </div>
+                  <p>Lab data analysis #${REPORT}: ${SAMPLES} sample records processed for this request.</p>
                   <div class="meta"><strong>Service:</strong> ${SERVER_NAME}<br><strong>Protocol:</strong> TCP/IP + HTTP/1.1<br>
                   <strong>Scope:</strong> Localhost / private LAN lab only</div>
                 </main></body></html>
-                """.replace("${SERVER_NAME}", serverName);
+                """.replace("${SERVER_NAME}", serverName)
+                .replace("${MEDIAN}", Integer.toString(median))
+                .replace("${P95}", Integer.toString(p95))
+                .replace("${P99}", Integer.toString(p99))
+                .replace("${REPORT}", Long.toString(reportNumber))
+                .replace("${SAMPLES}", Integer.toString(ANALYTICS_SAMPLES));
         return new HttpResponse(200, "OK", "text/html; charset=UTF-8",
                 html.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static int[] createTrafficSamples() {
+        Random random = new Random(0x5EED_2026L);
+        int[] samples = new int[ANALYTICS_SAMPLES];
+        for (int index = 0; index < samples.length; index++) {
+            samples[index] = random.nextInt(1_000);
+        }
+        return samples;
     }
 
     private static HttpResponse text(int code, String reason, String message) {

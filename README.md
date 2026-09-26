@@ -15,7 +15,9 @@ mvn clean javafx:run
 
 Dashboard khởi động ở trạng thái `SERVER STOPPED`. Nút Start Server mở listener HTTP và trang lab thật trong trình duyệt; Test Connection chỉ gọi `/health` ở chế độ nền; Stop Server đóng socket và worker pool. Các thống kê request, client IP, response time và biểu đồ được cập nhật từ traffic thật.
 
-Khi bật Protection, server kiểm tra lưu lượng theo IP trước khi đưa kết nối vào worker pool. Request vượt `Rate Limit (req/sec)` nhận HTTP 429; vượt `Max connections` nhận HTTP 503. Nếu Auto Defense và Temporary Blocking cùng bật, các lần vượt ngưỡng liên tiếp sẽ chặn IP trong `Block Duration`. Tắt Protection bỏ qua các giới hạn này. Bộ đếm Limited/Dropped và biểu đồ Protection dùng số request bị từ chối thực tế, không phải giá trị ước lượng. Nếu trình duyệt và máy tạo tải dùng cùng một IP, cả hai sẽ chịu chung giới hạn theo IP.
+Khi bật Protection, server kiểm tra giới hạn kết nối lúc nhận socket và giới hạn tốc độ sau khi đọc HTTP headers. Request vượt `Rate Limit (req/sec)` nhận HTTP 429; vượt `Max connections` nhận HTTP 503. Nếu Auto Defense và Temporary Blocking cùng bật, các lần vượt ngưỡng liên tiếp sẽ chặn IP trong `Block Duration`. Tắt Protection bỏ qua các giới hạn này. Bộ đếm Limited/Dropped và biểu đồ Protection dùng số request bị từ chối thực tế, không phải giá trị ước lượng. Trên cùng máy server, trình duyệt và simulator dùng quota riêng; các client từ máy khác chia sẻ quota theo IP nguồn.
+
+Trang `/` tính lại báo cáo từ 600.000 mẫu dữ liệu lab trên mỗi request bằng một worker phân tích, trong khi số luồng HTTP cũng bị giới hạn. Không có `sleep` hay độ trễ cố định: khi tắt phòng thủ, lưu lượng vượt năng lực xử lý sẽ xếp hàng, khiến trang chậm hoặc có request bị từ chối; khi bật phòng thủ, request bị chặn không chạy tác vụ phân tích. `/health` vẫn là endpoint nhẹ để kiểm tra kết nối. Mặc định Rate Limit là 20 req/sec; có thể chỉnh trong Settings để phù hợp máy lab. Server chỉ nhận kết nối từ localhost hoặc mạng riêng/link-local.
 
 Xem thiết kế tổng thể tại [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

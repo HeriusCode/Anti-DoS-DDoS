@@ -32,7 +32,7 @@ public final class ServerConfig {
 
     public static ServerConfig defaults() {
         return new ServerConfig(8080, 100, 50, 100, 1_000,
-                50, Duration.ofSeconds(30), true);
+                20, Duration.ofSeconds(30), true);
     }
 
     public int getServerPort() {

@@ -18,7 +18,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Multi-client TCP server with basic HTTP/1.1 GET handling. */
 public final class WebServer implements AutoCloseable {
     private static final int BACKLOG = 128;
-    private static final int WORKER_COUNT = Math.max(8, Runtime.getRuntime().availableProcessors() * 4);
+    private static final int WORKER_COUNT = Math.max(8,
+            Math.min(32, Runtime.getRuntime().availableProcessors() * 2));
 
     private final Observer observer;
     private final RequestGuard requestGuard;
@@ -44,7 +45,8 @@ public final class WebServer implements AutoCloseable {
         socket.setReuseAddress(true);
         socket.bind(new InetSocketAddress("0.0.0.0", port), BACKLOG);
         serverSocket = socket;
-        workerExecutor = Executors.newFixedThreadPool(WORKER_COUNT,
+        workerExecutor = new ThreadPoolExecutor(WORKER_COUNT, WORKER_COUNT, 0, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(256),
                 Thread.ofPlatform().daemon(true).name("http-worker-", 0).factory());
         rejectExecutor = new ThreadPoolExecutor(4, 4, 30, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(128),
@@ -59,6 +61,14 @@ public final class WebServer implements AutoCloseable {
         while (running.get()) {
             try {
                 Socket client = serverSocket.accept();
+                // This intentionally resource-constrained service is for the
+                // local/private-network lab, never for public Internet peers.
+                if (!client.getInetAddress().isLoopbackAddress()
+                        && !client.getInetAddress().isSiteLocalAddress()
+                        && !client.getInetAddress().isLinkLocalAddress()) {
+                    client.close();
+                    continue;
+                }
                 client.setTcpNoDelay(true);
                 String ip = client.getInetAddress().getHostAddress();
                 observer.onConnectionOpened(ip);
@@ -76,11 +86,19 @@ public final class WebServer implements AutoCloseable {
                     continue;
                 }
                 try {
-                    workerExecutor.execute(new ClientConnection(client, requestHandler, observer, requestGuard::leave));
+                    workerExecutor.execute(new ClientConnection(client, requestHandler, observer,
+                            requestGuard, requestGuard::leave));
                 } catch (RejectedExecutionException exception) {
                     requestGuard.leave();
-                    observer.onConnectionClosed(ip);
-                    client.close();
+                    try {
+                        rejectExecutor.execute(() -> reject(client, ip,
+                                RequestGuard.Decision.CONNECTION_LIMITED, started));
+                    } catch (RejectedExecutionException ignored) {
+                        observer.onRequestRejected(ip, RequestGuard.Decision.CONNECTION_LIMITED);
+                        observer.onRequestCompleted(ip, "REJECTED", "-", 503, System.nanoTime() - started);
+                        observer.onConnectionClosed(ip);
+                        client.close();
+                    }
                 }
             } catch (SocketException exception) {
                 if (running.get()) {

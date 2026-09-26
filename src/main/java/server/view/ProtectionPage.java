@@ -140,7 +140,7 @@ public final class ProtectionPage extends VBox {
 
     private Button protectionButton(String text, boolean enable) {
         Button button = UiIcons.graphic(new Button(text), "fas-shield-alt", "button-icon");
-        button.getStyleClass().addAll("small-button", "action-button", enable ? "outline-button" : "success-button");
+        button.getStyleClass().addAll("small-button", "action-button", enable ? "success-button" : "danger-button");
         button.setOnAction(event -> controller.setProtectionEnabled(enable));
         return button;
     }

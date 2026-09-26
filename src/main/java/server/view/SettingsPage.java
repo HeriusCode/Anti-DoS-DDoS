@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.Properties;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -80,9 +81,9 @@ public final class SettingsPage extends VBox {
                 .bindBidirectional(protectionConnectionLimit.getEditor().textProperty());
         blockDuration.getEditor().textProperty()
                 .bindBidirectional(temporaryBlockDuration.getEditor().textProperty());
-        protectionToggle = controllerToggle(controller.protectionEnabledProperty().get(),
+        protectionToggle = controllerToggle(controller.protectionEnabledProperty(),
                 controller::setProtectionEnabled);
-        autoDefenseToggle = controllerToggle(controller.autoDefenseProperty().get(),
+        autoDefenseToggle = controllerToggle(controller.autoDefenseProperty(),
                 controller::setAutoDefense);
 
         getStyleClass().add("settings-page");
@@ -476,9 +477,13 @@ public final class SettingsPage extends VBox {
         return button;
     }
 
-    private ToggleSwitch controllerToggle(boolean selected, java.util.function.Consumer<Boolean> setter) {
-        ToggleSwitch control = toggle(selected);
-        control.selectedProperty().addListener((observable, oldValue, value) -> setter.accept(value));
+    private ToggleSwitch controllerToggle(ReadOnlyBooleanProperty state,
+                                          java.util.function.Consumer<Boolean> setter) {
+        ToggleSwitch control = toggle(state.get());
+        control.selectedProperty().addListener((observable, oldValue, value) -> {
+            if (state.get() != value) setter.accept(value);
+        });
+        state.addListener((observable, oldValue, value) -> control.setSelected(value));
         return control;
     }
 

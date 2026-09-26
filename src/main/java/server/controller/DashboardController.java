@@ -158,7 +158,7 @@ public final class DashboardController implements AutoCloseable {
             return CompletableFuture.completedFuture(false);
         }
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(localServerUrl() + "health"))
+                .uri(URI.create(getServerUrl() + "health"))
                 .timeout(Duration.ofSeconds(3))
                 .GET()
                 .build();
@@ -200,6 +200,7 @@ public final class DashboardController implements AutoCloseable {
         setRateLimitActive(enabled);
         setConnectionLimitActive(enabled);
         setBlockingActive(enabled);
+        setAutoDefense(enabled);
         appendLog(enabled ? "DEFENSE" : "WARNING", "SERVER",
                 enabled ? "PROTECTION_ENABLED" : "PROTECTION_DISABLED",
                 enabled ? "Protection mechanisms enabled" : "Protection mechanisms disabled");
@@ -347,20 +348,17 @@ public final class DashboardController implements AutoCloseable {
     }
 
     private void openServerPage() {
+        String url = getServerUrl();
         try {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI.create(localServerUrl()));
-                appendLog("INFO", "SERVER", "BROWSER_OPENED", "Opened " + localServerUrl());
+                Desktop.getDesktop().browse(URI.create(url));
+                appendLog("INFO", "SERVER", "BROWSER_OPENED", "Opened " + url);
             } else {
-                appendLog("WARNING", "SERVER", "BROWSER_UNAVAILABLE", "Open " + getServerUrl() + " manually");
+                appendLog("WARNING", "SERVER", "BROWSER_UNAVAILABLE", "Open " + url + " manually");
             }
         } catch (IOException | RuntimeException exception) {
             appendLog("WARNING", "SERVER", "BROWSER_FAILED", exception.getMessage());
         }
-    }
-
-    private String localServerUrl() {
-        return "http://127.0.0.1:" + serverPort.get() + "/";
     }
 
     private String topClientIp() {
