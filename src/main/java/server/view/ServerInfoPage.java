@@ -33,6 +33,7 @@ import server.model.ClientInfo;
 public final class ServerInfoPage extends VBox {
     private final DashboardController controller;
     private final Spinner<Integer> portSpinner;
+    private final TextField serverIpField = new TextField();
 
     public ServerInfoPage(DashboardController controller) {
         this.controller = controller;
@@ -124,10 +125,14 @@ public final class ServerInfoPage extends VBox {
     }
 
     private Node createConfiguration() {
-        TextField ip = new TextField();
-        ip.textProperty().bind(controller.serverIpProperty());
-        ip.setEditable(false);
-        ip.getStyleClass().add("server-config-field");
+        serverIpField.setText(controller.serverIpProperty().get());
+        serverIpField.setEditable(true);
+        serverIpField.setPromptText("IPv4 của Máy 2, ví dụ 192.168.1.20");
+        serverIpField.disableProperty().bind(controller.serverRunningProperty());
+        serverIpField.getStyleClass().add("server-config-field");
+        controller.serverIpProperty().addListener((observable, oldIp, newIp) -> {
+            if (!serverIpField.isFocused()) serverIpField.setText(newIp);
+        });
 
         portSpinner.setEditable(true);
         portSpinner.getStyleClass().add("server-config-spinner");
@@ -144,7 +149,7 @@ public final class ServerInfoPage extends VBox {
         GridPane form = new GridPane();
         form.setHgap(10);
         form.setVgap(7);
-        addConfigRow(form, 0, "fas-network-wired", "Server IP", ip);
+        addConfigRow(form, 0, "fas-network-wired", "Server IP", serverIpField);
         addConfigRow(form, 1, "fas-plug", "Port", portSpinner);
         addConfigRow(form, 2, "fas-globe", "Protocol", protocol);
         addConfigRow(form, 3, "fas-microchip", "Thread Pool Size", threads);
@@ -221,9 +226,15 @@ public final class ServerInfoPage extends VBox {
         Button lab = preset("fas-file-medical-alt", "Lab Server",
                 controller.serverIpProperty().get() + ":" + controller.serverPortProperty().get());
         Button custom = preset("fas-file-alt", "Custom", "Enter IP:Port");
-        local.setOnAction(event -> portSpinner.getValueFactory().setValue(8080));
-        lab.setOnAction(event -> portSpinner.getValueFactory().setValue(controller.getConfig().getServerPort()));
-        custom.setOnAction(event -> portSpinner.requestFocus());
+        local.setOnAction(event -> {
+            serverIpField.setText("127.0.0.1");
+            portSpinner.getValueFactory().setValue(8080);
+        });
+        lab.setOnAction(event -> {
+            serverIpField.setText(controller.serverIpProperty().get());
+            portSpinner.getValueFactory().setValue(controller.getConfig().getServerPort());
+        });
+        custom.setOnAction(event -> serverIpField.requestFocus());
         VBox list = new VBox(7, local, lab, custom);
         list.getStyleClass().add("preset-list");
         VBox panel = titledPanel("fas-bolt", "QUICK PRESETS", list);
@@ -406,7 +417,11 @@ public final class ServerInfoPage extends VBox {
 
     private void startFromForm() {
         Integer port = portSpinner.getValue();
-        if (port != null) controller.startServer(port);
+        serverIpField.getStyleClass().remove("input-error");
+        if (port != null && !controller.startServer(serverIpField.getText(), port)) {
+            serverIpField.getStyleClass().add("input-error");
+            serverIpField.requestFocus();
+        }
     }
 
     private static TextFlow logLine(String entry) {

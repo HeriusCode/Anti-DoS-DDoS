@@ -3,6 +3,7 @@ package server.controller;
 import java.awt.Desktop;
 import java.io.IOException;
 import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.URI;
@@ -119,17 +120,25 @@ public final class DashboardController implements AutoCloseable {
 
     /** Starts the real server and opens its home page in the default browser. */
     public boolean startServer(int port) {
+        return startServer(serverIp.get(), port);
+    }
+
+    /** Starts the server on a selected IPv4 address owned by this machine. */
+    public boolean startServer(String ipAddress, int port) {
         if (serverRunning.get()) {
             return true;
         }
         try {
+            Inet4Address bindAddress = requireLocalLabAddress(ipAddress);
             config.setServerPort(port);
-            webServer.start(port);
+            webServer.start(bindAddress.getHostAddress(), port);
+            serverIp.set(bindAddress.getHostAddress());
             serverPort.set(port);
             startedAt = Instant.now();
             serverRunning.set(true);
             detectionReason.set("Traffic is within configured limits");
-            appendLog("INFO", "SERVER", "SERVER_STARTED", "Listening on 0.0.0.0:" + port);
+            appendLog("INFO", "SERVER", "SERVER_STARTED",
+                    "Listening on " + bindAddress.getHostAddress() + ":" + port);
             openServerPage();
             return true;
         } catch (IOException | IllegalArgumentException exception) {
@@ -137,6 +146,30 @@ public final class DashboardController implements AutoCloseable {
             serverRunning.set(false);
             return false;
         }
+    }
+
+    private static Inet4Address requireLocalLabAddress(String input) throws IOException {
+        String candidate = input == null ? "" : input.trim();
+        if (candidate.isEmpty()) {
+            throw new IllegalArgumentException("Server IP is required");
+        }
+
+        InetAddress resolved = InetAddress.getByName(candidate);
+        if (!(resolved instanceof Inet4Address ipv4)) {
+            throw new IllegalArgumentException("Only IPv4 addresses are supported in this lab version");
+        }
+        if (ipv4.isAnyLocalAddress() || ipv4.isMulticastAddress()
+                || (!ipv4.isLoopbackAddress() && !ipv4.isSiteLocalAddress()
+                && !ipv4.isLinkLocalAddress())) {
+            throw new IllegalArgumentException("Use localhost or a private LAN address owned by Machine 2");
+        }
+
+        NetworkInterface network = NetworkInterface.getByInetAddress(ipv4);
+        if (network == null || !network.isUp()) {
+            throw new IllegalArgumentException(
+                    "IP " + ipv4.getHostAddress() + " is not assigned to an active adapter on Machine 2");
+        }
+        return ipv4;
     }
 
     public void stopServer() {

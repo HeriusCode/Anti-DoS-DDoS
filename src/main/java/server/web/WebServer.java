@@ -39,12 +39,17 @@ public final class WebServer implements AutoCloseable {
     }
 
     public synchronized void start(int port) throws IOException {
+        start("0.0.0.0", port);
+    }
+
+    /** Starts the listener on one selected local network interface. */
+    public synchronized void start(String bindAddress, int port) throws IOException {
         if (running.get()) {
             return;
         }
         ServerSocket socket = new ServerSocket();
         socket.setReuseAddress(true);
-        socket.bind(new InetSocketAddress("0.0.0.0", port), BACKLOG);
+        socket.bind(new InetSocketAddress(bindAddress, port), BACKLOG);
         serverSocket = socket;
         workerExecutor = new ThreadPoolExecutor(WORKER_COUNT, WORKER_COUNT, 0, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(ServerConfig.MAX_ACTIVE_CONNECTIONS),

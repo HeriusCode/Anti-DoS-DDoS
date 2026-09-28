@@ -488,6 +488,10 @@
     -fx-text-fill: #bfe1ff;
 }
 .server-config-field:disabled { -fx-opacity: .92; }
+.server-config-field.input-error {
+    -fx-border-color: #ff4967;
+    -fx-effect: dropshadow(gaussian, rgba(255, 73, 103, .35), 7, .25, 0, 0);
+}
 .server-config-spinner { -fx-max-width: 10000px; }
 .server-config-spinner .increment-arrow-button,
 .server-config-spinner .decrement-arrow-button { -fx-background-color: #07304a; }
