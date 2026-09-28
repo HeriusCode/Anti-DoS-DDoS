@@ -3,17 +3,15 @@ package server.web;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Handles the small set of HTTP GET endpoints used by the controlled lab. */
 public final class HttpRequestHandler {
-    // A bounded, CPU-backed analytics workload for the private lab page. One report
-    // is calculated at a time, like a small server with one analytics worker.
+    // Each page request performs real CPU work. Concurrent requests contend for
+    // the machine's resources without an artificial single-request gate.
     private static final int ANALYTICS_SAMPLES = 600_000;
     private final String serverName;
     private final int[] trafficSamples = createTrafficSamples();
-    private final Semaphore analyticsWorker = new Semaphore(1, true);
     private final AtomicLong reportsGenerated = new AtomicLong();
 
     public HttpRequestHandler(String serverName) {
@@ -34,27 +32,13 @@ public final class HttpRequestHandler {
     }
 
     private HttpResponse htmlPage() {
-        long reportNumber;
-        int median;
-        int p95;
-        int p99;
-        try {
-            analyticsWorker.acquire();
-            try {
-                reportNumber = reportsGenerated.incrementAndGet();
-                int[] report = trafficSamples.clone();
-                report[(int) (reportNumber % report.length)] = (int) (reportNumber % 1_000);
-                Arrays.sort(report);
-                median = report[report.length / 2];
-                p95 = report[(int) (report.length * .95)];
-                p99 = report[(int) (report.length * .99)];
-            } finally {
-                analyticsWorker.release();
-            }
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            return text(503, "Service Unavailable", "Analytics worker is stopping.");
-        }
+        long reportNumber = reportsGenerated.incrementAndGet();
+        int[] report = trafficSamples.clone();
+        report[(int) (reportNumber % report.length)] = (int) (reportNumber % 1_000);
+        Arrays.sort(report);
+        int median = report[report.length / 2];
+        int p95 = report[(int) (report.length * .95)];
+        int p99 = report[(int) (report.length * .99)];
         String html = """
                 <!doctype html>
                 <html lang="en">

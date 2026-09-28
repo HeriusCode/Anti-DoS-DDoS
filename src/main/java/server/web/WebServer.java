@@ -14,6 +14,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import server.config.ServerConfig;
 
 /** Multi-client TCP server with basic HTTP/1.1 GET handling. */
 public final class WebServer implements AutoCloseable {
@@ -46,7 +47,7 @@ public final class WebServer implements AutoCloseable {
         socket.bind(new InetSocketAddress("0.0.0.0", port), BACKLOG);
         serverSocket = socket;
         workerExecutor = new ThreadPoolExecutor(WORKER_COUNT, WORKER_COUNT, 0, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(256),
+                new ArrayBlockingQueue<>(ServerConfig.MAX_ACTIVE_CONNECTIONS),
                 Thread.ofPlatform().daemon(true).name("http-worker-", 0).factory());
         rejectExecutor = new ThreadPoolExecutor(4, 4, 30, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(128),

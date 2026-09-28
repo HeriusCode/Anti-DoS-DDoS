@@ -9,9 +9,9 @@ import java.util.concurrent.atomic.LongAdder;
 import server.detection.AttackStatus;
 import server.model.ClientInfo;
 
-/** Thread-safe counters and a five-second rolling request window. */
+/** Thread-safe ingress and completion counters for one-request-per-connection HTTP. */
 public final class TrafficMonitor {
-    private static final long WINDOW_MILLIS = 5_000;
+    private static final long WINDOW_MILLIS = 1_000;
 
     private final LongAdder totalRequests = new LongAdder();
     private final LongAdder successfulRequests = new LongAdder();
@@ -25,8 +25,14 @@ public final class TrafficMonitor {
     private final ConcurrentHashMap<String, ClientCounters> clients = new ConcurrentHashMap<>();
 
     public void connectionOpened(String ip) {
+        long now = System.currentTimeMillis();
+        totalRequests.increment();
+        requestTimes.addLast(now);
         activeConnections.incrementAndGet();
-        clients.computeIfAbsent(ip, ignored -> new ClientCounters()).activeConnections.incrementAndGet();
+        ClientCounters counters = clients.computeIfAbsent(ip, ignored -> new ClientCounters());
+        counters.totalRequests.increment();
+        counters.requestTimes.addLast(now);
+        counters.activeConnections.incrementAndGet();
     }
 
     public void connectionClosed(String ip) {
@@ -38,20 +44,14 @@ public final class TrafficMonitor {
     }
 
     public void requestCompleted(String ip, int statusCode, long responseNanos) {
-        long now = System.currentTimeMillis();
-        totalRequests.increment();
         completedRequests.increment();
         totalResponseNanos.add(Math.max(0, responseNanos));
-        requestTimes.addLast(now);
         if (statusCode >= 200 && statusCode < 400) {
             successfulRequests.increment();
         } else if (statusCode != 429 && statusCode != 503) {
             failedRequests.increment();
         }
 
-        ClientCounters counters = clients.computeIfAbsent(ip, ignored -> new ClientCounters());
-        counters.totalRequests.increment();
-        counters.requestTimes.addLast(now);
     }
 
     public void requestLimited() {

@@ -104,8 +104,8 @@ public final class TrafficMonitorPage extends VBox {
 
     private Node createMetricStrip() {
         HBox metrics = new HBox(10,
-                metric("fas-server", "TOTAL REQUESTS", controller.totalRequestsProperty().asString("%,d"), "blue"),
-                metric("fas-bolt", "REQUESTS/SEC", controller.requestsPerSecondProperty().asString(), "cyan"),
+                metric("fas-server", "INCOMING REQUESTS", controller.totalRequestsProperty().asString("%,d"), "blue"),
+                metric("fas-bolt", "INCOMING/SEC", controller.requestsPerSecondProperty().asString(), "cyan"),
                 metric("fas-check-circle", "SUCCESSFUL", controller.successfulRequestsProperty().asString("%,d"), "green"),
                 metric("fas-times-circle", "FAILED", controller.failedRequestsProperty().asString("%,d"), "red"),
                 metric("fas-exclamation-triangle", "LIMITED", controller.limitedRequestsProperty().asString("%,d"), "yellow"),
@@ -301,12 +301,10 @@ public final class TrafficMonitorPage extends VBox {
         successfulSeries.getData().clear();
         thresholdSeries.getData().clear();
         miniSeries.getData().clear();
-        double successRatio = controller.totalRequestsProperty().get() == 0 ? 1.0
-                : (double) controller.successfulRequestsProperty().get() / controller.totalRequestsProperty().get();
         for (DashboardController.ChartPoint point : controller.getChartPoints()) {
             totalSeries.getData().add(new XYChart.Data<>(point.index(), point.requestsPerSecond()));
             successfulSeries.getData().add(new XYChart.Data<>(point.index(),
-                    Math.round(point.requestsPerSecond() * successRatio)));
+                    point.successfulRequestsPerSecond()));
             thresholdSeries.getData().add(new XYChart.Data<>(point.index(),
                     controller.getConfig().getRequestRateThreshold()));
             miniSeries.getData().add(new XYChart.Data<>(point.index(), point.requestsPerSecond()));

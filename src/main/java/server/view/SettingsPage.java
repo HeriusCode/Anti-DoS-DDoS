@@ -71,10 +71,11 @@ public final class SettingsPage extends VBox {
         threadPool = spinner(1, 256, Math.max(8, Runtime.getRuntime().availableProcessors() * 4));
         requestThreshold = spinner(1, 100_000, config.getRequestRateThreshold());
         clientThreshold = spinner(1, 100_000, config.getPerClientRateThreshold());
-        maxConnections = spinner(1, 100_000, config.getMaxActiveConnections());
+        maxConnections = spinner(1, ServerConfig.MAX_ACTIVE_CONNECTIONS, config.getMaxActiveConnections());
         responseThreshold = spinner(1, 120_000, (int) config.getResponseTimeThresholdMillis());
         rateLimit = spinner(1, 100_000, config.getRateLimit());
-        protectionConnectionLimit = spinner(1, 100_000, config.getMaxActiveConnections());
+        protectionConnectionLimit = spinner(1, ServerConfig.MAX_ACTIVE_CONNECTIONS,
+                config.getMaxActiveConnections());
         blockDuration = spinner(1, 86_400, (int) config.getBlockDuration().toSeconds());
         temporaryBlockDuration = spinner(1, 86_400, (int) config.getBlockDuration().toSeconds());
         maxConnections.getEditor().textProperty()
@@ -349,7 +350,9 @@ public final class SettingsPage extends VBox {
             config.setRateLimit(spinnerValue(rateLimit));
             config.setBlockDuration(Duration.ofSeconds(spinnerValue(temporaryBlockDuration)));
             config.setAutoDefense(autoDefenseToggle.isSelected());
-            controller.setProtectionEnabled(protectionToggle.isSelected());
+            if (controller.protectionEnabledProperty().get() != protectionToggle.isSelected()) {
+                controller.setProtectionEnabled(protectionToggle.isSelected());
+            }
             controller.setAutoDefense(autoDefenseToggle.isSelected());
             controller.appendLog("INFO", "SERVER", "SETTINGS_SAVED",
                     "Detection and protection configuration updated");

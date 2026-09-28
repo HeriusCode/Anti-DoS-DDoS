@@ -3,6 +3,7 @@ package server.config;
 import java.time.Duration;
 
 public final class ServerConfig {
+    public static final int MAX_ACTIVE_CONNECTIONS = 1_024;
     private volatile int serverPort;
     private volatile int requestRateThreshold;
     private volatile int perClientRateThreshold;
@@ -67,7 +68,11 @@ public final class ServerConfig {
     }
 
     public void setMaxActiveConnections(int value) {
-        maxActiveConnections = requirePositive(value, "Maximum connections");
+        if (value < 1 || value > MAX_ACTIVE_CONNECTIONS) {
+            throw new IllegalArgumentException("Maximum connections must be between 1 and "
+                    + MAX_ACTIVE_CONNECTIONS);
+        }
+        maxActiveConnections = value;
     }
 
     public long getResponseTimeThresholdMillis() {

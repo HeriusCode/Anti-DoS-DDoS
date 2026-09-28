@@ -61,6 +61,7 @@ public final class DashboardController implements AutoCloseable {
             .connectTimeout(Duration.ofSeconds(2)).build();
     private final AtomicLong lastRequestLogNanos = new AtomicLong();
     private final AtomicLong lastProtectionLogNanos = new AtomicLong();
+    private final AtomicLong connectionLimitRejections = new AtomicLong();
     private final Timeline timeline;
 
     private final BooleanProperty serverRunning = new SimpleBooleanProperty(false);
@@ -77,6 +78,7 @@ public final class DashboardController implements AutoCloseable {
     private final LongProperty failedRequests = new SimpleLongProperty();
     private final LongProperty limitedRequests = new SimpleLongProperty();
     private final LongProperty droppedRequests = new SimpleLongProperty();
+    private final LongProperty rejectedConnections = new SimpleLongProperty();
     private final IntegerProperty serverPort;
     private final IntegerProperty requestsPerSecond = new SimpleIntegerProperty();
     private final IntegerProperty activeConnections = new SimpleIntegerProperty();
@@ -95,6 +97,7 @@ public final class DashboardController implements AutoCloseable {
     private Instant startedAt;
     private long chartIndex;
     private long previousChartTotal;
+    private long previousChartSuccessful;
     private long previousChartLimited;
     private long previousChartDropped;
     private AttackStatus previousStatus = AttackStatus.NORMAL;
@@ -176,7 +179,9 @@ public final class DashboardController implements AutoCloseable {
     public void resetStatistics() {
         trafficMonitor.reset();
         requestGuard.reset();
+        connectionLimitRejections.set(0);
         previousChartTotal = 0;
+        previousChartSuccessful = 0;
         previousChartLimited = 0;
         previousChartDropped = 0;
         totalRequests.set(0);
@@ -184,6 +189,7 @@ public final class DashboardController implements AutoCloseable {
         failedRequests.set(0);
         limitedRequests.set(0);
         droppedRequests.set(0);
+        rejectedConnections.set(0);
         requestsPerSecond.set(0);
         averageResponseTime.set(0);
         chartPoints.clear();
@@ -271,6 +277,7 @@ public final class DashboardController implements AutoCloseable {
         failedRequests.set(statistics.failedRequests());
         limitedRequests.set(statistics.limitedRequests());
         droppedRequests.set(statistics.droppedRequests());
+        rejectedConnections.set(connectionLimitRejections.get());
         activeConnections.set(statistics.activeConnections());
         averageResponseTime.set(statistics.averageResponseTimeMillis());
 
@@ -292,16 +299,20 @@ public final class DashboardController implements AutoCloseable {
         }
 
         long totalNow = statistics.totalRequests();
+        long successfulNow = statistics.successfulRequests();
         long limitedNow = statistics.limitedRequests();
         long droppedNow = statistics.droppedRequests();
         int totalDuringSecond = (int) Math.min(Integer.MAX_VALUE, Math.max(0, totalNow - previousChartTotal));
+        int successfulDuringSecond = (int) Math.min(Integer.MAX_VALUE,
+                Math.max(0, successfulNow - previousChartSuccessful));
         int limitedDuringSecond = (int) Math.min(Integer.MAX_VALUE, Math.max(0, limitedNow - previousChartLimited));
         int droppedDuringSecond = (int) Math.min(Integer.MAX_VALUE, Math.max(0, droppedNow - previousChartDropped));
         previousChartTotal = totalNow;
+        previousChartSuccessful = successfulNow;
         previousChartLimited = limitedNow;
         previousChartDropped = droppedNow;
         chartPoints.add(new ChartPoint(++chartIndex, totalDuringSecond,
-                Math.max(0, totalDuringSecond - limitedDuringSecond - droppedDuringSecond),
+                successfulDuringSecond,
                 limitedDuringSecond, droppedDuringSecond, clock.get()));
         if (chartPoints.size() > MAX_CHART_POINTS) {
             chartPoints.removeFirst();
@@ -408,6 +419,7 @@ public final class DashboardController implements AutoCloseable {
     public ReadOnlyIntegerProperty serverPortProperty() { return serverPort; }
     public ReadOnlyIntegerProperty requestsPerSecondProperty() { return requestsPerSecond; }
     public ReadOnlyIntegerProperty activeConnectionsProperty() { return activeConnections; }
+    public ReadOnlyLongProperty rejectedConnectionsProperty() { return rejectedConnections; }
     public ReadOnlyDoubleProperty averageResponseTimeProperty() { return averageResponseTime; }
     public ReadOnlyStringProperty clockProperty() { return clock; }
     public ReadOnlyStringProperty uptimeProperty() { return uptime; }
@@ -457,6 +469,9 @@ public final class DashboardController implements AutoCloseable {
         public void onRequestRejected(String ip, RequestGuard.Decision decision) {
             if (decision == RequestGuard.Decision.LIMITED) trafficMonitor.requestLimited();
             else trafficMonitor.requestDropped();
+            if (decision == RequestGuard.Decision.CONNECTION_LIMITED) {
+                connectionLimitRejections.incrementAndGet();
+            }
             long now = System.nanoTime();
             long previous = lastProtectionLogNanos.get();
             if (now - previous >= 1_000_000_000L && lastProtectionLogNanos.compareAndSet(previous, now)) {
@@ -476,7 +491,7 @@ public final class DashboardController implements AutoCloseable {
         }
     }
 
-    public record ChartPoint(long index, int requestsPerSecond, int allowedRequestsPerSecond,
+    public record ChartPoint(long index, int requestsPerSecond, int successfulRequestsPerSecond,
                              int limitedRequestsPerSecond, int droppedRequestsPerSecond,
                              String timeLabel) {
     }
