@@ -136,7 +136,9 @@ public final class TrafficMonitorPage extends VBox {
         xAxis.setForceZeroInRange(false);
         xAxis.setTickLabelsVisible(false);
         xAxis.setMinorTickVisible(false);
-        NumberAxis yAxis = new NumberAxis(0, 200, 50);
+        NumberAxis yAxis = new NumberAxis();
+        yAxis.setAutoRanging(true);
+        yAxis.setForceZeroInRange(true);
         LineChart<Number, Number> chart = new LineChart<>(xAxis, yAxis);
         chart.setAnimated(false);
         chart.setCreateSymbols(true);
@@ -280,7 +282,9 @@ public final class TrafficMonitorPage extends VBox {
         NumberAxis x = new NumberAxis();
         x.setTickLabelsVisible(false);
         x.setMinorTickVisible(false);
-        NumberAxis y = new NumberAxis(0, 200, 50);
+        NumberAxis y = new NumberAxis();
+        y.setAutoRanging(true);
+        y.setForceZeroInRange(true);
         LineChart<Number, Number> chart = new LineChart<>(x, y);
         chart.setAnimated(false);
         chart.setLegendVisible(false);

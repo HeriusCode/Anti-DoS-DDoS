@@ -26,6 +26,7 @@ public final class SecurityPanel extends VBox {
         this.controller = controller;
         setSpacing(10);
         getChildren().addAll(createSummary(), createLogPanel(), createActions(), createServerInfo());
+        VBox.setVgrow(getChildren().get(1), Priority.ALWAYS);
     }
 
     private Node createSummary() {
@@ -86,9 +87,8 @@ public final class SecurityPanel extends VBox {
 
         VBox panel = new VBox(8, header, filters, logView);
         panel.setPadding(new Insets(10));
-        panel.setPrefHeight(385);
-        panel.setMinHeight(300);
-        panel.setMaxHeight(405);
+        panel.setPrefHeight(300);
+        panel.setMinHeight(0);
         panel.getStyleClass().add("panel");
         return panel;
     }

@@ -43,7 +43,17 @@ public final class ServerInfoPage extends VBox {
         setPadding(new Insets(12));
 
         HBox top = new HBox(10, createConfiguration(), createStatus(), createPresets());
-        top.setMinHeight(300);
+        top.setMinHeight(220);
+        top.setPrefHeight(250);
+        top.setMaxHeight(250);
+        top.getStyleClass().add("server-info-top");
+        top.getChildren().forEach(node -> {
+            if (node instanceof VBox panel) {
+                panel.setPadding(new Insets(8, 10, 8, 10));
+                panel.setSpacing(7);
+                panel.setMinHeight(0);
+            }
+        });
         HBox.setHgrow(top.getChildren().get(0), Priority.ALWAYS);
         HBox.setHgrow(top.getChildren().get(1), Priority.ALWAYS);
         HBox.setHgrow(top.getChildren().get(2), Priority.ALWAYS);
@@ -51,8 +61,11 @@ public final class ServerInfoPage extends VBox {
         VBox right = new VBox(10, createStatistics(), createClients());
         right.setPrefWidth(530);
         right.setMinWidth(440);
+        right.setMinHeight(0);
         VBox.setVgrow(right.getChildren().get(1), Priority.ALWAYS);
         HBox lower = new HBox(10, createServerLog(), right);
+        lower.setMinHeight(0);
+        lower.getStyleClass().add("server-info-lower");
         HBox.setHgrow(lower.getChildren().get(0), Priority.ALWAYS);
         HBox.setHgrow(right, Priority.ALWAYS);
         VBox.setVgrow(lower, Priority.ALWAYS);
@@ -130,7 +143,7 @@ public final class ServerInfoPage extends VBox {
 
         GridPane form = new GridPane();
         form.setHgap(10);
-        form.setVgap(10);
+        form.setVgap(7);
         addConfigRow(form, 0, "fas-network-wired", "Server IP", ip);
         addConfigRow(form, 1, "fas-plug", "Port", portSpinner);
         addConfigRow(form, 2, "fas-globe", "Protocol", protocol);
@@ -154,6 +167,7 @@ public final class ServerInfoPage extends VBox {
         VBox panel = titledPanel("fas-cog", "SERVER CONFIGURATION", form, buttons);
         panel.setPrefWidth(455);
         panel.setMinWidth(350);
+        panel.setMinHeight(0);
         return panel;
     }
 
@@ -171,7 +185,7 @@ public final class ServerInfoPage extends VBox {
     private Node createStatus() {
         GridPane values = new GridPane();
         values.setHgap(16);
-        values.setVgap(8);
+        values.setVgap(5);
         Label state = new Label();
         state.textProperty().bind(Bindings.when(controller.serverRunningProperty()).then("●  RUNNING").otherwise("●  STOPPED"));
         state.getStyleClass().add("server-running-value");
@@ -190,6 +204,7 @@ public final class ServerInfoPage extends VBox {
         VBox panel = titledPanel("fas-server", "SERVER STATUS", values);
         panel.setPrefWidth(285);
         panel.setMinWidth(245);
+        panel.setMinHeight(0);
         return panel;
     }
 
@@ -209,10 +224,12 @@ public final class ServerInfoPage extends VBox {
         local.setOnAction(event -> portSpinner.getValueFactory().setValue(8080));
         lab.setOnAction(event -> portSpinner.getValueFactory().setValue(controller.getConfig().getServerPort()));
         custom.setOnAction(event -> portSpinner.requestFocus());
-        VBox list = new VBox(12, local, lab, custom);
+        VBox list = new VBox(7, local, lab, custom);
+        list.getStyleClass().add("preset-list");
         VBox panel = titledPanel("fas-bolt", "QUICK PRESETS", list);
         panel.setPrefWidth(285);
         panel.setMinWidth(240);
+        panel.setMinHeight(0);
         return panel;
     }
 
@@ -270,6 +287,7 @@ public final class ServerInfoPage extends VBox {
         panel.setPadding(new Insets(10));
         panel.setPrefWidth(515);
         panel.setMinWidth(420);
+        panel.setMinHeight(0);
         panel.getStyleClass().add("panel");
         return panel;
     }
@@ -331,6 +349,7 @@ public final class ServerInfoPage extends VBox {
         VBox.setVgrow(table, Priority.ALWAYS);
         VBox panel = new VBox(7, header, table);
         panel.setPadding(new Insets(9));
+        panel.setMinHeight(0);
         panel.getStyleClass().add("panel");
         return panel;
     }

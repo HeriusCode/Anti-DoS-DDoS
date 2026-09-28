@@ -220,7 +220,9 @@ public final class DetectionPage extends VBox {
         NumberAxis x = new NumberAxis();
         x.setTickLabelsVisible(false);
         x.setMinorTickVisible(false);
-        NumberAxis y = new NumberAxis(0, 200, 50);
+        NumberAxis y = new NumberAxis();
+        y.setAutoRanging(true);
+        y.setForceZeroInRange(true);
         LineChart<Number, Number> chart = new LineChart<>(x, y);
         chart.setAnimated(false);
         chart.setCreateSymbols(true);

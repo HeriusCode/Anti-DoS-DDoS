@@ -28,8 +28,8 @@ public final class Main extends Application {
 
         stage.initStyle(StageStyle.UNDECORATED);
         stage.setTitle("DoS/DDoS Protection Server - Machine 2");
-        stage.setMinWidth(Math.min(1180, screen.getWidth()));
-        stage.setMinHeight(Math.min(700, screen.getHeight()));
+        stage.setMinWidth(Math.min(960, screen.getWidth()));
+        stage.setMinHeight(Math.min(600, screen.getHeight()));
         stage.setScene(scene);
         stage.setX(screen.getMinX() + (screen.getWidth() - width) / 2);
         stage.setY(screen.getMinY() + (screen.getHeight() - height) / 2);
