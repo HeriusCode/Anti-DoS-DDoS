@@ -3,6 +3,7 @@ package server.controller;
 import java.awt.Desktop;
 import java.io.IOException;
 import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.URI;
@@ -44,6 +45,7 @@ import server.model.ClientInfo;
 import server.model.ProtectionStatus;
 import server.monitor.TrafficMonitor;
 import server.monitor.TrafficStatistics;
+import server.web.RequestGuard;
 import server.web.WebServer;
 
 /** Connects the JavaFX dashboard to the real TCP/HTTP server and traffic monitor. */
@@ -54,10 +56,13 @@ public final class DashboardController implements AutoCloseable {
 
     private final ServerConfig config;
     private final TrafficMonitor trafficMonitor = new TrafficMonitor();
+    private final RequestGuard requestGuard;
     private final WebServer webServer;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2)).build();
     private final AtomicLong lastRequestLogNanos = new AtomicLong();
+    private final AtomicLong lastProtectionLogNanos = new AtomicLong();
+    private final AtomicLong connectionLimitRejections = new AtomicLong();
     private final Timeline timeline;
 
     private final BooleanProperty serverRunning = new SimpleBooleanProperty(false);
@@ -74,6 +79,7 @@ public final class DashboardController implements AutoCloseable {
     private final LongProperty failedRequests = new SimpleLongProperty();
     private final LongProperty limitedRequests = new SimpleLongProperty();
     private final LongProperty droppedRequests = new SimpleLongProperty();
+    private final LongProperty rejectedConnections = new SimpleLongProperty();
     private final IntegerProperty serverPort;
     private final IntegerProperty requestsPerSecond = new SimpleIntegerProperty();
     private final IntegerProperty activeConnections = new SimpleIntegerProperty();
@@ -91,13 +97,18 @@ public final class DashboardController implements AutoCloseable {
 
     private Instant startedAt;
     private long chartIndex;
+    private long previousChartTotal;
+    private long previousChartSuccessful;
+    private long previousChartLimited;
+    private long previousChartDropped;
     private AttackStatus previousStatus = AttackStatus.NORMAL;
 
     public DashboardController(ServerConfig config) {
         this.config = config;
         this.serverPort = new SimpleIntegerProperty(config.getServerPort());
         this.autoDefense.set(config.isAutoDefense());
-        this.webServer = new WebServer(new ServerObserver());
+        this.requestGuard = new RequestGuard(config);
+        this.webServer = new WebServer(new ServerObserver(), requestGuard);
         appendLog("INFO", "SERVER", "APPLICATION_STARTED", "Dashboard initialized; server is stopped");
         timeline = new Timeline(new KeyFrame(javafx.util.Duration.seconds(1), event -> updateDashboard()));
         timeline.setCycleCount(Timeline.INDEFINITE);
@@ -109,17 +120,25 @@ public final class DashboardController implements AutoCloseable {
 
     /** Starts the real server and opens its home page in the default browser. */
     public boolean startServer(int port) {
+        return startServer(serverIp.get(), port);
+    }
+
+    /** Starts the server on a selected IPv4 address owned by this machine. */
+    public boolean startServer(String ipAddress, int port) {
         if (serverRunning.get()) {
             return true;
         }
         try {
+            Inet4Address bindAddress = requireLocalLabAddress(ipAddress);
             config.setServerPort(port);
-            webServer.start(port);
+            webServer.start(bindAddress.getHostAddress(), port);
+            serverIp.set(bindAddress.getHostAddress());
             serverPort.set(port);
             startedAt = Instant.now();
             serverRunning.set(true);
             detectionReason.set("Traffic is within configured limits");
-            appendLog("INFO", "SERVER", "SERVER_STARTED", "Listening on 0.0.0.0:" + port);
+            appendLog("INFO", "SERVER", "SERVER_STARTED",
+                    "Listening on " + bindAddress.getHostAddress() + ":" + port);
             openServerPage();
             return true;
         } catch (IOException | IllegalArgumentException exception) {
@@ -127,6 +146,30 @@ public final class DashboardController implements AutoCloseable {
             serverRunning.set(false);
             return false;
         }
+    }
+
+    private static Inet4Address requireLocalLabAddress(String input) throws IOException {
+        String candidate = input == null ? "" : input.trim();
+        if (candidate.isEmpty()) {
+            throw new IllegalArgumentException("Server IP is required");
+        }
+
+        InetAddress resolved = InetAddress.getByName(candidate);
+        if (!(resolved instanceof Inet4Address ipv4)) {
+            throw new IllegalArgumentException("Only IPv4 addresses are supported in this lab version");
+        }
+        if (ipv4.isAnyLocalAddress() || ipv4.isMulticastAddress()
+                || (!ipv4.isLoopbackAddress() && !ipv4.isSiteLocalAddress()
+                && !ipv4.isLinkLocalAddress())) {
+            throw new IllegalArgumentException("Use localhost or a private LAN address owned by Machine 2");
+        }
+
+        NetworkInterface network = NetworkInterface.getByInetAddress(ipv4);
+        if (network == null || !network.isUp()) {
+            throw new IllegalArgumentException(
+                    "IP " + ipv4.getHostAddress() + " is not assigned to an active adapter on Machine 2");
+        }
+        return ipv4;
     }
 
     public void stopServer() {
@@ -151,7 +194,7 @@ public final class DashboardController implements AutoCloseable {
             return CompletableFuture.completedFuture(false);
         }
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(localServerUrl() + "health"))
+                .uri(URI.create(getServerUrl() + "health"))
                 .timeout(Duration.ofSeconds(3))
                 .GET()
                 .build();
@@ -168,11 +211,18 @@ public final class DashboardController implements AutoCloseable {
 
     public void resetStatistics() {
         trafficMonitor.reset();
+        requestGuard.reset();
+        connectionLimitRejections.set(0);
+        previousChartTotal = 0;
+        previousChartSuccessful = 0;
+        previousChartLimited = 0;
+        previousChartDropped = 0;
         totalRequests.set(0);
         successfulRequests.set(0);
         failedRequests.set(0);
         limitedRequests.set(0);
         droppedRequests.set(0);
+        rejectedConnections.set(0);
         requestsPerSecond.set(0);
         averageResponseTime.set(0);
         chartPoints.clear();
@@ -184,24 +234,29 @@ public final class DashboardController implements AutoCloseable {
     }
 
     public void setProtectionEnabled(boolean enabled) {
+        requestGuard.setProtectionEnabled(enabled);
         protectionEnabled.set(enabled);
         setRateLimitActive(enabled);
         setConnectionLimitActive(enabled);
         setBlockingActive(enabled);
+        setAutoDefense(enabled);
         appendLog(enabled ? "DEFENSE" : "WARNING", "SERVER",
                 enabled ? "PROTECTION_ENABLED" : "PROTECTION_DISABLED",
                 enabled ? "Protection mechanisms enabled" : "Protection mechanisms disabled");
     }
 
     public void setRateLimitActive(boolean enabled) {
+        requestGuard.setRateLimitActive(enabled);
         updateProtectionSwitch(rateLimitActive, enabled, "RATE_LIMIT", "Rate Limiting");
     }
 
     public void setConnectionLimitActive(boolean enabled) {
+        requestGuard.setConnectionLimitActive(enabled);
         updateProtectionSwitch(connectionLimitActive, enabled, "CONNECTION_LIMIT", "Connection Limiting");
     }
 
     public void setBlockingActive(boolean enabled) {
+        requestGuard.setBlockingActive(enabled);
         updateProtectionSwitch(blockingActive, enabled, "TEMP_BLOCK", "Temporary Blocking");
     }
 
@@ -211,6 +266,7 @@ public final class DashboardController implements AutoCloseable {
         }
         autoDefense.set(enabled);
         config.setAutoDefense(enabled);
+        if (!enabled) requestGuard.clearBlocks();
         appendLog("INFO", "SERVER", "AUTO_DEFENSE", enabled ? "Auto Defense ON" : "Auto Defense OFF");
     }
 
@@ -254,12 +310,18 @@ public final class DashboardController implements AutoCloseable {
         failedRequests.set(statistics.failedRequests());
         limitedRequests.set(statistics.limitedRequests());
         droppedRequests.set(statistics.droppedRequests());
+        rejectedConnections.set(connectionLimitRejections.get());
         activeConnections.set(statistics.activeConnections());
         averageResponseTime.set(statistics.averageResponseTimeMillis());
 
         int rps = (int) Math.ceil(statistics.requestsPerSecond());
         requestsPerSecond.set(rps);
-        clients.setAll(trafficMonitor.clientSnapshots(config.getPerClientRateThreshold()));
+        clients.setAll(trafficMonitor.clientSnapshots(config.getPerClientRateThreshold()).stream()
+                .map(client -> {
+                    long remaining = requestGuard.blockRemainingSeconds(client.ipAddress());
+                    return new ClientInfo(client.ipAddress(), client.totalRequests(), client.requestsPerSecond(),
+                            client.activeConnections(), client.status(), remaining > 0, remaining);
+                }).toList());
 
         AttackStatus next = classify(rps);
         attackStatus.set(next);
@@ -269,7 +331,22 @@ public final class DashboardController implements AutoCloseable {
             previousStatus = next;
         }
 
-        chartPoints.add(new ChartPoint(++chartIndex, rps, clock.get()));
+        long totalNow = statistics.totalRequests();
+        long successfulNow = statistics.successfulRequests();
+        long limitedNow = statistics.limitedRequests();
+        long droppedNow = statistics.droppedRequests();
+        int totalDuringSecond = (int) Math.min(Integer.MAX_VALUE, Math.max(0, totalNow - previousChartTotal));
+        int successfulDuringSecond = (int) Math.min(Integer.MAX_VALUE,
+                Math.max(0, successfulNow - previousChartSuccessful));
+        int limitedDuringSecond = (int) Math.min(Integer.MAX_VALUE, Math.max(0, limitedNow - previousChartLimited));
+        int droppedDuringSecond = (int) Math.min(Integer.MAX_VALUE, Math.max(0, droppedNow - previousChartDropped));
+        previousChartTotal = totalNow;
+        previousChartSuccessful = successfulNow;
+        previousChartLimited = limitedNow;
+        previousChartDropped = droppedNow;
+        chartPoints.add(new ChartPoint(++chartIndex, totalDuringSecond,
+                successfulDuringSecond,
+                limitedDuringSecond, droppedDuringSecond, clock.get()));
         if (chartPoints.size() > MAX_CHART_POINTS) {
             chartPoints.removeFirst();
         }
@@ -315,20 +392,17 @@ public final class DashboardController implements AutoCloseable {
     }
 
     private void openServerPage() {
+        String url = getServerUrl();
         try {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI.create(localServerUrl()));
-                appendLog("INFO", "SERVER", "BROWSER_OPENED", "Opened " + localServerUrl());
+                Desktop.getDesktop().browse(URI.create(url));
+                appendLog("INFO", "SERVER", "BROWSER_OPENED", "Opened " + url);
             } else {
-                appendLog("WARNING", "SERVER", "BROWSER_UNAVAILABLE", "Open " + getServerUrl() + " manually");
+                appendLog("WARNING", "SERVER", "BROWSER_UNAVAILABLE", "Open " + url + " manually");
             }
         } catch (IOException | RuntimeException exception) {
             appendLog("WARNING", "SERVER", "BROWSER_FAILED", exception.getMessage());
         }
-    }
-
-    private String localServerUrl() {
-        return "http://127.0.0.1:" + serverPort.get() + "/";
     }
 
     private String topClientIp() {
@@ -378,6 +452,7 @@ public final class DashboardController implements AutoCloseable {
     public ReadOnlyIntegerProperty serverPortProperty() { return serverPort; }
     public ReadOnlyIntegerProperty requestsPerSecondProperty() { return requestsPerSecond; }
     public ReadOnlyIntegerProperty activeConnectionsProperty() { return activeConnections; }
+    public ReadOnlyLongProperty rejectedConnectionsProperty() { return rejectedConnections; }
     public ReadOnlyDoubleProperty averageResponseTimeProperty() { return averageResponseTime; }
     public ReadOnlyStringProperty clockProperty() { return clock; }
     public ReadOnlyStringProperty uptimeProperty() { return uptime; }
@@ -424,11 +499,33 @@ public final class DashboardController implements AutoCloseable {
         }
 
         @Override
+        public void onRequestRejected(String ip, RequestGuard.Decision decision) {
+            if (decision == RequestGuard.Decision.LIMITED) trafficMonitor.requestLimited();
+            else trafficMonitor.requestDropped();
+            if (decision == RequestGuard.Decision.CONNECTION_LIMITED) {
+                connectionLimitRejections.incrementAndGet();
+            }
+            long now = System.nanoTime();
+            long previous = lastProtectionLogNanos.get();
+            if (now - previous >= 1_000_000_000L && lastProtectionLogNanos.compareAndSet(previous, now)) {
+                String event = switch (decision) {
+                    case LIMITED -> "RATE_LIMIT";
+                    case BLOCKED -> "TEMP_BLOCK";
+                    case CONNECTION_LIMITED -> "CONNECTION_LIMIT";
+                    case ALLOW -> "ALLOW";
+                };
+                appendLog("DEFENSE", ip, event, "Rejected excess lab traffic");
+            }
+        }
+
+        @Override
         public void onServerError(Exception exception) {
             appendLog("ERROR", "SERVER", "SERVER_ERROR", exception.getMessage());
         }
     }
 
-    public record ChartPoint(long index, int requestsPerSecond, String timeLabel) {
+    public record ChartPoint(long index, int requestsPerSecond, int successfulRequestsPerSecond,
+                             int limitedRequestsPerSecond, int droppedRequestsPerSecond,
+                             String timeLabel) {
     }
 }

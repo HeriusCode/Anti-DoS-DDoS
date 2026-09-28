@@ -22,6 +22,7 @@ import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -124,6 +125,8 @@ public final class ProtectionPage extends VBox {
 
     private Node heroAutoDefense() {
         ToggleSwitch toggle = toggle(controller.autoDefenseProperty(), controller::setAutoDefense);
+        toggle.setTooltip(new Tooltip("Automatically block a client after repeated rate-limit violations "
+                + "when Temporary Blocking is enabled."));
         HBox value = new HBox(6, new Label("ON"), toggle);
         value.setAlignment(Pos.CENTER_LEFT);
         value.getStyleClass().add("protection-auto-value");
@@ -140,13 +143,15 @@ public final class ProtectionPage extends VBox {
 
     private Button protectionButton(String text, boolean enable) {
         Button button = UiIcons.graphic(new Button(text), "fas-shield-alt", "button-icon");
-        button.getStyleClass().addAll("small-button", "action-button", enable ? "outline-button" : "success-button");
+        button.getStyleClass().addAll("small-button", "action-button", enable ? "success-button" : "danger-button");
         button.setOnAction(event -> controller.setProtectionEnabled(enable));
         return button;
     }
 
     private Node createRateCard() {
-        Label limit = new Label(controller.getConfig().getRateLimit() + " req/sec");
+        Label limit = new Label();
+        limit.textProperty().bind(Bindings.createStringBinding(
+                () -> controller.getConfig().getRateLimit() + " req/sec", controller.clockProperty()));
         VBox clients = new VBox(4);
         Runnable refresh = () -> {
             clients.getChildren().clear();
@@ -163,9 +168,15 @@ public final class ProtectionPage extends VBox {
     private Node createConnectionCard() {
         Label active = new Label();
         active.textProperty().bind(controller.activeConnectionsProperty().asString());
+        Label maximum = new Label();
+        maximum.textProperty().bind(Bindings.createStringBinding(
+                () -> String.valueOf(controller.getConfig().getMaxActiveConnections()),
+                controller.clockProperty()));
+        Label rejected = new Label();
+        rejected.textProperty().bind(controller.rejectedConnectionsProperty().asString());
         return protectionCard("fas-link", "CONNECTION LIMITING", controller.connectionLimitActiveProperty(),
-                valueLine("Max connections", String.valueOf(controller.getConfig().getMaxActiveConnections())),
-                valueLine("Current connections", active), valueLine("Rejected connections", "0"));
+                valueLine("Max connections", maximum),
+                valueLine("Current connections", active), valueLine("Rejected connections", rejected));
     }
 
     private Node createBlockingCard() {
@@ -193,9 +204,20 @@ public final class ProtectionPage extends VBox {
         Label action = new Label();
         action.textProperty().bind(Bindings.createStringBinding(() -> {
             if (!controller.protectionEnabledProperty().get()) return "None";
-            if (controller.attackStatusProperty().get() == AttackStatus.ATTACK_DETECTED) return "Rate limit + Blocking";
-            return "Monitoring";
-        }, controller.protectionEnabledProperty(), controller.attackStatusProperty()));
+            StringBuilder enabledActions = new StringBuilder();
+            if (controller.rateLimitActiveProperty().get()) enabledActions.append("Rate limit");
+            if (controller.connectionLimitActiveProperty().get()) {
+                if (!enabledActions.isEmpty()) enabledActions.append(" + ");
+                enabledActions.append("Connection limit");
+            }
+            if (controller.blockingActiveProperty().get() && controller.autoDefenseProperty().get()) {
+                if (!enabledActions.isEmpty()) enabledActions.append(" + ");
+                enabledActions.append("Temp block");
+            }
+            return enabledActions.isEmpty() ? "Monitoring" : enabledActions.toString();
+        }, controller.protectionEnabledProperty(), controller.rateLimitActiveProperty(),
+                controller.connectionLimitActiveProperty(), controller.blockingActiveProperty(),
+                controller.autoDefenseProperty()));
         VBox content = new VBox(7, valueLine("Protection status", enabled),
                 valueLine("Last triggered", controller.detectedAtProperty()),
                 valueLine("Reason", controller.detectionReasonProperty()), valueLine("Action", action));
@@ -221,7 +243,8 @@ public final class ProtectionPage extends VBox {
         NumberAxis x = new NumberAxis();
         x.setTickLabelsVisible(false);
         x.setMinorTickVisible(false);
-        NumberAxis y = new NumberAxis(0, 200, 50);
+        NumberAxis y = new NumberAxis();
+        y.setForceZeroInRange(true);
         LineChart<Number, Number> chart = new LineChart<>(x, y);
         chart.setAnimated(false);
         chart.setCreateSymbols(true);
@@ -232,8 +255,8 @@ public final class ProtectionPage extends VBox {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox legend = new HBox(12, spacer, legend("Total Requests", "protection-total-line"),
-                legend("Allowed", "protection-allowed-line"), legend("Limited", "protection-limited-line"),
-                legend("Blocked", "protection-blocked-line"));
+                legend("Completed 2xx", "protection-allowed-line"), legend("Limited", "protection-limited-line"),
+                legend("Blocked / Dropped", "protection-blocked-line"));
         VBox panel = panel(5, sectionHeader("fas-stopwatch", "TRAFFIC & PROTECTION STATUS"), legend, chart);
         panel.setPrefWidth(700);
         panel.setMinWidth(520);
@@ -370,18 +393,11 @@ public final class ProtectionPage extends VBox {
         allowedSeries.getData().clear();
         limitedSeries.getData().clear();
         blockedSeries.getData().clear();
-        int limit = controller.getConfig().getRateLimit();
-        int threshold = controller.getConfig().getRequestRateThreshold();
         for (DashboardController.ChartPoint point : controller.getChartPoints()) {
-            int total = point.requestsPerSecond();
-            int allowed = controller.rateLimitActiveProperty().get() ? Math.min(total, limit) : total;
-            int limited = Math.max(0, total - allowed);
-            int blocked = controller.blockingActiveProperty().get() && total >= threshold
-                    ? Math.max(0, (total - threshold) / 3) : 0;
-            totalSeries.getData().add(new XYChart.Data<>(point.index(), total));
-            allowedSeries.getData().add(new XYChart.Data<>(point.index(), allowed));
-            limitedSeries.getData().add(new XYChart.Data<>(point.index(), limited));
-            blockedSeries.getData().add(new XYChart.Data<>(point.index(), blocked));
+            totalSeries.getData().add(new XYChart.Data<>(point.index(), point.requestsPerSecond()));
+            allowedSeries.getData().add(new XYChart.Data<>(point.index(), point.successfulRequestsPerSecond()));
+            limitedSeries.getData().add(new XYChart.Data<>(point.index(), point.limitedRequestsPerSecond()));
+            blockedSeries.getData().add(new XYChart.Data<>(point.index(), point.droppedRequestsPerSecond()));
         }
     }
 

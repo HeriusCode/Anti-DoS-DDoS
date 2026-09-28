@@ -15,6 +15,7 @@ import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -69,7 +70,9 @@ public final class MonitorPanel extends VBox {
         xAxis.setTickLabelsVisible(false);
         xAxis.setTickMarkVisible(false);
         xAxis.setMinorTickVisible(false);
-        NumberAxis yAxis = new NumberAxis(0, 200, 50);
+        NumberAxis yAxis = new NumberAxis();
+        yAxis.setAutoRanging(true);
+        yAxis.setForceZeroInRange(true);
         yAxis.setLabel("Requests/sec");
 
         LineChart<Number, Number> chart = new LineChart<>(xAxis, yAxis);
@@ -78,8 +81,7 @@ public final class MonitorPanel extends VBox {
         chart.setLegendVisible(false);
         chart.setHorizontalGridLinesVisible(true);
         chart.setVerticalGridLinesVisible(true);
-        chart.setPrefHeight(185);
-        chart.setMaxHeight(205);
+        chart.setMinHeight(0);
         chart.getStyleClass().add("traffic-chart");
         requestSeries.setName("Current RPS");
         thresholdSeries.setName("Target RPS");
@@ -101,18 +103,27 @@ public final class MonitorPanel extends VBox {
         clientViewAll.setOnAction(event -> controller.appendLog(
                 "INFO", "DASHBOARD", "VIEW_CLIENTS", "Requested complete client list"));
         VBox clientPanel = section("fas-users", "CLIENT TRAFFIC", createClientTable(), clientViewAll);
-        clientPanel.setMinWidth(375);
+        clientPanel.setMinSize(0, 0);
         HBox.setHgrow(clientPanel, Priority.ALWAYS);
 
         HBox detectionContent = new HBox(10, createDetectionCard(), createProtectionCard());
+        detectionContent.setMinWidth(0);
         HBox.setHgrow(detectionContent.getChildren().getFirst(), Priority.ALWAYS);
         HBox.setHgrow(detectionContent.getChildren().getLast(), Priority.ALWAYS);
-        VBox detectionPanel = section("fas-shield-alt", "DETECTION & PROTECTION", detectionContent);
-        detectionPanel.setMinWidth(375);
+
+        ScrollPane detectionScroll = new ScrollPane(detectionContent);
+        detectionScroll.setFitToWidth(true);
+        detectionScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        detectionScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        detectionScroll.setMinSize(0, 0);
+        detectionScroll.getStyleClass().add("component-scroll");
+
+        VBox detectionPanel = section("fas-shield-alt", "DETECTION & PROTECTION", detectionScroll);
+        detectionPanel.setMinSize(0, 0);
         HBox.setHgrow(detectionPanel, Priority.ALWAYS);
 
         HBox bottom = new HBox(10, clientPanel, detectionPanel);
-        bottom.setMinHeight(230);
+        bottom.setMinHeight(0);
         return bottom;
     }
 
@@ -176,12 +187,10 @@ public final class MonitorPanel extends VBox {
         time.textProperty().bind(Bindings.concat("Detected at: ", controller.detectedAtProperty()));
         time.getStyleClass().add("detail-value");
 
-        VBox rules = new VBox(5,
-                rule("●  Request rate (global)"), rule("●  Per-client rate"),
-                rule("●  Active connections"), rule("●  Response time"));
-        VBox card = new VBox(7, label, status, reason, threshold, time, separator(), new Label("Detection Rules"), rules);
+        VBox card = new VBox(7, label, status, reason, threshold, time, separator());
         card.getStyleClass().add("inner-card");
         card.setPadding(new Insets(8));
+        card.setMinSize(0, 0);
         HBox.setHgrow(card, Priority.ALWAYS);
         return card;
     }
@@ -204,28 +213,11 @@ public final class MonitorPanel extends VBox {
         HBox blocking = toggleRow("Temporary Blocking", blockingSwitch);
         HBox auto = toggleRow("Auto Defense", autoSwitch);
 
-        Label blocked = new Label("Blocked Clients");
-        blocked.getStyleClass().add("detail-label");
-        Button blockedViewAll = viewAllButton();
-        blockedViewAll.setOnAction(event -> controller.appendLog(
-                "INFO", "DASHBOARD", "VIEW_BLOCKED", "Requested complete blocked-client list"));
-        Region blockedSpacer = new Region();
-        HBox.setHgrow(blockedSpacer, Priority.ALWAYS);
-        HBox blockedHeader = new HBox(6, blocked, blockedSpacer, blockedViewAll);
-        blockedHeader.setAlignment(Pos.CENTER_LEFT);
-        Label blockedIp = new Label();
-        blockedIp.textProperty().bind(Bindings.createStringBinding(() -> controller.getClients().stream()
-                        .filter(ClientInfo::blocked)
-                        .findFirst()
-                        .map(client -> "●  " + client.ipAddress() + "   Remaining: " + client.blockRemainingSeconds() + "s")
-                        .orElse("No clients blocked"),
-                controller.getClients()));
-        blockedIp.getStyleClass().add("blocked-client");
 
-        VBox card = new VBox(6, label, status, separator(), rate, connections, blocking, auto,
-                separator(), blockedHeader, blockedIp);
+        VBox card = new VBox(6, label, status, separator(), rate, connections, blocking, auto);
         card.getStyleClass().add("inner-card");
         card.setPadding(new Insets(10));
+        card.setMinSize(0, 0);
         HBox.setHgrow(card, Priority.ALWAYS);
         return card;
     }
@@ -254,7 +246,7 @@ public final class MonitorPanel extends VBox {
         HBox card = new HBox(12, iconLabel, text);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(10));
-        card.setMinWidth(175);
+        card.setMinSize(0, 0);
         card.getStyleClass().addAll("metric-card", color + "-border");
         GridPane.setHgrow(card, Priority.ALWAYS);
         return card;

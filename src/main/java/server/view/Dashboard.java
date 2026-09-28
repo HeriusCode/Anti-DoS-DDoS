@@ -25,6 +25,8 @@ public final class Dashboard extends BorderPane {
     private final DashboardController controller;
     private final StackPane contentHost = new StackPane();
     private final List<Node> menuItems = new ArrayList<>();
+    private HBox headerNavigation;
+    private VBox sidebarView;
     private final Node dashboardPage;
     private final Node serverInfoPage;
     private final Node trafficMonitorPage;
@@ -49,6 +51,9 @@ public final class Dashboard extends BorderPane {
         setLeft(createSidebar());
         contentHost.getChildren().setAll(dashboardPage);
         setCenter(contentHost);
+        widthProperty().addListener((observable, oldWidth, width) -> applyResponsiveLayout(width.doubleValue(), getHeight()));
+        heightProperty().addListener((observable, oldHeight, height) -> applyResponsiveLayout(getWidth(), height.doubleValue()));
+        applyResponsiveLayout(getWidth(), getHeight());
     }
 
     private Node createHeader() {
@@ -58,11 +63,11 @@ public final class Dashboard extends BorderPane {
         HBox brand = new HBox(12, logo, title);
         brand.setAlignment(Pos.CENTER_LEFT);
 
-        HBox navigation = new HBox(0,
+        headerNavigation = new HBox(0,
                 navItem("Web Server"), navSeparator(), navItem("Traffic Monitor"),
                 navSeparator(), navItem("DoS/DDoS Detector"), navSeparator(),
                 navItem("Anti-DoS"), navSeparator(), navItem("Security Logger"));
-        navigation.setAlignment(Pos.CENTER_LEFT);
+        headerNavigation.setAlignment(Pos.CENTER_LEFT);
 
         Label statusDot = new Label("●");
         statusDot.getStyleClass().add("online-dot");
@@ -88,7 +93,7 @@ public final class Dashboard extends BorderPane {
 
         Region headerSpacer = new Region();
         HBox.setHgrow(headerSpacer, Priority.ALWAYS);
-        HBox centerBar = new HBox(10, navigation, headerSpacer, statusDot, status, divider(), clock);
+        HBox centerBar = new HBox(10, headerNavigation, headerSpacer, statusDot, status, divider(), clock);
         centerBar.setAlignment(Pos.CENTER_LEFT);
 
         BorderPane headerContent = new BorderPane();
@@ -103,6 +108,11 @@ public final class Dashboard extends BorderPane {
         StackPane.setAlignment(windowControls, Pos.CENTER_RIGHT);
         StackPane.setMargin(windowControls, new Insets(0, 5, 0, 0));
         header.getStyleClass().add("top-header");
+        header.widthProperty().addListener((observable, oldWidth, width) -> {
+            boolean compact = width.doubleValue() < 1_300;
+            headerNavigation.setVisible(!compact);
+            headerNavigation.setManaged(!compact);
+        });
         installWindowDragging(header);
         return header;
     }
@@ -132,12 +142,13 @@ public final class Dashboard extends BorderPane {
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
-        VBox sidebar = new VBox(12, menu, spacer, shield, secure, motto);
-        sidebar.setAlignment(Pos.TOP_CENTER);
-        sidebar.setPadding(new Insets(18, 12, 24, 12));
-        sidebar.setPrefWidth(218);
-        sidebar.getStyleClass().add("sidebar");
-        return sidebar;
+        sidebarView = new VBox(12, menu, spacer, shield, secure, motto);
+        sidebarView.setAlignment(Pos.TOP_CENTER);
+        sidebarView.setPadding(new Insets(18, 12, 24, 12));
+        sidebarView.setMinWidth(158);
+        sidebarView.setPrefWidth(218);
+        sidebarView.getStyleClass().add("sidebar");
+        return sidebarView;
     }
 
     private Node createContent() {
@@ -146,27 +157,53 @@ public final class Dashboard extends BorderPane {
                 new MonitorPanel(controller));
         mainColumn.setId("main-column");
         HBox.setHgrow(mainColumn, Priority.ALWAYS);
-        mainColumn.setMinWidth(780);
+        mainColumn.setMinWidth(0);
+        mainColumn.setMaxWidth(Double.MAX_VALUE);
 
         SecurityPanel securityPanel = new SecurityPanel(controller);
         securityPanel.setId("security-column");
         securityPanel.setPrefWidth(400);
-        securityPanel.setMinWidth(360);
+        securityPanel.setMinWidth(230);
+        HBox.setHgrow(securityPanel, Priority.NEVER);
 
         HBox layout = new HBox(12, mainColumn, securityPanel);
         layout.setId("dashboard-layout");
+        layout.setMinWidth(0);
         layout.setPadding(new Insets(14));
         layout.getStyleClass().add("dashboard-content");
 
         ScrollPane scroll = new ScrollPane(layout);
         scroll.setFitToWidth(true);
         scroll.setFitToHeight(true);
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scroll.getStyleClass().add("content-scroll");
-        scroll.viewportBoundsProperty().addListener((observable, oldBounds, bounds) ->
-                layout.setPrefWidth(bounds.getWidth()));
+        scroll.viewportBoundsProperty().addListener((observable, oldBounds, bounds) -> {
+            layout.setPrefWidth(bounds.getWidth());
+            double available = Math.max(0, bounds.getWidth() - 40);
+            double railWidth = Math.max(230, Math.min(400, available * 0.30));
+            securityPanel.setPrefWidth(railWidth);
+            mainColumn.setPrefWidth(Math.max(0, available - railWidth - 12));
+        });
         return scroll;
+    }
+
+    private void applyResponsiveLayout(double width, double height) {
+        boolean compact = width < 1_300 || height < 790;
+        getStyleClass().removeAll("compact", "very-compact");
+        if (compact) getStyleClass().add("compact");
+        if (width < 1_020 || height < 660) getStyleClass().add("very-compact");
+        if (sidebarView != null) {
+            sidebarView.setPrefWidth(Math.max(158, Math.min(218, width * 0.17)));
+            sidebarView.setPadding(height < 720
+                    ? new Insets(8, 6, 10, 6)
+                    : new Insets(18, 12, 24, 12));
+        }
+        if (headerNavigation != null) {
+            boolean showNavigation = width >= 1_300;
+            headerNavigation.setVisible(showNavigation);
+            headerNavigation.setManaged(showNavigation);
+        }
     }
 
     private Label navItem(String text) {

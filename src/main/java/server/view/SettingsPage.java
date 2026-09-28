@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.Properties;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -70,19 +71,20 @@ public final class SettingsPage extends VBox {
         threadPool = spinner(1, 256, Math.max(8, Runtime.getRuntime().availableProcessors() * 4));
         requestThreshold = spinner(1, 100_000, config.getRequestRateThreshold());
         clientThreshold = spinner(1, 100_000, config.getPerClientRateThreshold());
-        maxConnections = spinner(1, 100_000, config.getMaxActiveConnections());
+        maxConnections = spinner(1, ServerConfig.MAX_ACTIVE_CONNECTIONS, config.getMaxActiveConnections());
         responseThreshold = spinner(1, 120_000, (int) config.getResponseTimeThresholdMillis());
         rateLimit = spinner(1, 100_000, config.getRateLimit());
-        protectionConnectionLimit = spinner(1, 100_000, config.getMaxActiveConnections());
+        protectionConnectionLimit = spinner(1, ServerConfig.MAX_ACTIVE_CONNECTIONS,
+                config.getMaxActiveConnections());
         blockDuration = spinner(1, 86_400, (int) config.getBlockDuration().toSeconds());
         temporaryBlockDuration = spinner(1, 86_400, (int) config.getBlockDuration().toSeconds());
         maxConnections.getEditor().textProperty()
                 .bindBidirectional(protectionConnectionLimit.getEditor().textProperty());
         blockDuration.getEditor().textProperty()
                 .bindBidirectional(temporaryBlockDuration.getEditor().textProperty());
-        protectionToggle = controllerToggle(controller.protectionEnabledProperty().get(),
+        protectionToggle = controllerToggle(controller.protectionEnabledProperty(),
                 controller::setProtectionEnabled);
-        autoDefenseToggle = controllerToggle(controller.autoDefenseProperty().get(),
+        autoDefenseToggle = controllerToggle(controller.autoDefenseProperty(),
                 controller::setAutoDefense);
 
         getStyleClass().add("settings-page");
@@ -348,7 +350,9 @@ public final class SettingsPage extends VBox {
             config.setRateLimit(spinnerValue(rateLimit));
             config.setBlockDuration(Duration.ofSeconds(spinnerValue(temporaryBlockDuration)));
             config.setAutoDefense(autoDefenseToggle.isSelected());
-            controller.setProtectionEnabled(protectionToggle.isSelected());
+            if (controller.protectionEnabledProperty().get() != protectionToggle.isSelected()) {
+                controller.setProtectionEnabled(protectionToggle.isSelected());
+            }
             controller.setAutoDefense(autoDefenseToggle.isSelected());
             controller.appendLog("INFO", "SERVER", "SETTINGS_SAVED",
                     "Detection and protection configuration updated");
@@ -476,9 +480,13 @@ public final class SettingsPage extends VBox {
         return button;
     }
 
-    private ToggleSwitch controllerToggle(boolean selected, java.util.function.Consumer<Boolean> setter) {
-        ToggleSwitch control = toggle(selected);
-        control.selectedProperty().addListener((observable, oldValue, value) -> setter.accept(value));
+    private ToggleSwitch controllerToggle(ReadOnlyBooleanProperty state,
+                                          java.util.function.Consumer<Boolean> setter) {
+        ToggleSwitch control = toggle(state.get());
+        control.selectedProperty().addListener((observable, oldValue, value) -> {
+            if (state.get() != value) setter.accept(value);
+        });
+        state.addListener((observable, oldValue, value) -> control.setSelected(value));
         return control;
     }
 

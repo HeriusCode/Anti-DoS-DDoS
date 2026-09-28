@@ -123,6 +123,26 @@
 
 .content-scroll { -fx-padding: 0; -fx-background-insets: 0; }
 
+/* Local scrolling for cards whose content is taller than their resized panel. */
+.component-scroll,
+.component-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+}
+.component-scroll {
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+.component-scroll .corner { -fx-background-color: transparent; }
+.component-scroll .scroll-bar:vertical {
+    -fx-pref-width: 8px;
+    -fx-background-color: transparent;
+}
+.component-scroll .scroll-bar:vertical .thumb {
+    -fx-background-color: #08769b;
+    -fx-background-radius: 6px;
+}
+
 .panel {
     -fx-background-color: linear-gradient(to bottom right, rgba(3, 27, 45, .97), rgba(2, 16, 29, .97));
     -fx-background-radius: 8px;
@@ -414,6 +434,14 @@
     -fx-background-color: linear-gradient(to bottom right, #020d17, #031522);
 }
 
+.server-info-top > .panel {
+    -fx-padding: 8 10 8 10;
+}
+.server-info-top .preset-list { -fx-spacing: 7px; }
+.server-info-top .preset-button { -fx-padding: 7 10 7 10; }
+.server-info-top .server-info-action { -fx-pref-height: 34px; }
+.server-info-lower { -fx-min-height: 0; }
+
 .server-info-hero {
     -fx-min-height: 86px;
     -fx-pref-height: 86px;
@@ -460,6 +488,10 @@
     -fx-text-fill: #bfe1ff;
 }
 .server-config-field:disabled { -fx-opacity: .92; }
+.server-config-field.input-error {
+    -fx-border-color: #ff4967;
+    -fx-effect: dropshadow(gaussian, rgba(255, 73, 103, .35), 7, .25, 0, 0);
+}
 .server-config-spinner { -fx-max-width: 10000px; }
 .server-config-spinner .increment-arrow-button,
 .server-config-spinner .decrement-arrow-button { -fx-background-color: #07304a; }
@@ -1038,3 +1070,58 @@
 .settings-footer-separator { -fx-text-fill: #225f8b; }
 .settings-feedback { -fx-text-fill: #40dfb5; }
 .settings-feedback.error { -fx-text-fill: #ff6480; }
+
+/* Keep the overview dashboard usable in a resized window instead of forcing
+   its cards to retain desktop-sized minimum dimensions. */
+.dashboard-root.compact .top-header {
+    -fx-min-height: 44px;
+    -fx-pref-height: 44px;
+}
+.dashboard-root.compact .brand-logo { -fx-icon-size: 24px; }
+.dashboard-root.compact .brand-title { -fx-font-size: 17px; }
+.dashboard-root.compact .menu-item { -fx-min-width: 0; }
+.dashboard-root.compact .menu-item .menu-icon { -fx-icon-size: 19px; -fx-min-width: 26px; }
+.dashboard-root.compact .menu-item .menu-title { -fx-font-size: 12px; }
+.dashboard-root.compact .menu-item .menu-subtitle { -fx-font-size: 9px; }
+.dashboard-root.compact .metric-card {
+    -fx-min-height: 54px;
+    -fx-pref-height: 58px;
+    -fx-pref-width: 0;
+}
+.dashboard-root.compact .metric-icon { -fx-icon-size: 19px; -fx-min-width: 24px; }
+.dashboard-root.compact .metric-title { -fx-font-size: 9px; }
+.dashboard-root.compact .metric-value { -fx-font-size: 15px; }
+.dashboard-root.compact .metric-note { -fx-font-size: 8px; }
+.dashboard-root.compact .statistics-panel { -fx-spacing: 5px; -fx-padding: 6 7 7 7; }
+.dashboard-root.compact .traffic-chart { -fx-pref-height: 132px; }
+.dashboard-root.compact .panel { -fx-padding: 6 7 7 7; }
+.dashboard-root.compact .inner-card { -fx-padding: 6px; }
+.dashboard-root.compact .detection-status { -fx-font-size: 12px; }
+.dashboard-root.compact .summary-item { -fx-min-height: 48px; }
+.dashboard-root.compact #security-column { -fx-spacing: 6px; }
+.dashboard-root.compact .log-list .list-cell { -fx-padding: 2 5 2 5; }
+
+.dashboard-root.very-compact .top-header {
+    -fx-min-height: 38px;
+    -fx-pref-height: 38px;
+}
+.dashboard-root.very-compact .brand-title { -fx-font-size: 14px; }
+.dashboard-root.very-compact .window-button {
+    -fx-min-width: 30px; -fx-pref-width: 30px; -fx-max-width: 30px;
+    -fx-min-height: 32px; -fx-pref-height: 32px; -fx-max-height: 32px;
+}
+.dashboard-root.very-compact .metric-card {
+    -fx-min-height: 46px;
+    -fx-pref-height: 48px;
+}
+.dashboard-root.very-compact .metric-note { -fx-font-size: 7px; }
+.dashboard-root.very-compact .metric-value { -fx-font-size: 13px; }
+.dashboard-root.very-compact .traffic-chart { -fx-pref-height: 100px; }
+.dashboard-root.very-compact .section-header { -fx-padding: 0 0 2 0; }
+.dashboard-root.very-compact .panel { -fx-padding: 4 5 5 5; }
+.dashboard-root.very-compact .summary-item { -fx-min-height: 38px; }
+.dashboard-root.very-compact .summary-icon { -fx-icon-size: 16px; }
+.dashboard-root.very-compact .summary-value { -fx-font-size: 11px; }
+.dashboard-root.very-compact .summary-title { -fx-font-size: 8px; }
+.dashboard-root.very-compact .action-button { -fx-padding: 5 7 5 7; }
+.dashboard-root.very-compact .server-icon-small { -fx-icon-size: 21px; }
