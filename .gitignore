@@ -4,3 +4,4 @@ target/
 *.iml
 security.log
 *.csv
+config/database.properties

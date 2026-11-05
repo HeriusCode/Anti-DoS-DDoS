@@ -91,9 +91,28 @@ public final class WebServer implements AutoCloseable {
                     }
                     continue;
                 }
+
+                boolean requestPrechecked = requestGuard.canCheckBeforeHeaders(ip);
+                if (requestPrechecked) {
+                    RequestGuard.Decision rateDecision = requestGuard.checkRequestByIp(ip);
+                    if (rateDecision != RequestGuard.Decision.ALLOW) {
+                        // This connection never enters the expensive/general worker queue.
+                        requestGuard.leave();
+                        try {
+                            rejectExecutor.execute(() -> reject(client, ip, rateDecision, started));
+                        } catch (RejectedExecutionException exception) {
+                            observer.onRequestRejected(ip, rateDecision);
+                            observer.onRequestCompleted(ip, "REJECTED", "-", 429,
+                                    System.nanoTime() - started);
+                            observer.onConnectionClosed(ip);
+                            client.close();
+                        }
+                        continue;
+                    }
+                }
                 try {
                     workerExecutor.execute(new ClientConnection(client, requestHandler, observer,
-                            requestGuard, requestGuard::leave));
+                            requestGuard, requestPrechecked, requestGuard::leave));
                 } catch (RejectedExecutionException exception) {
                     requestGuard.leave();
                     try {

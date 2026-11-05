@@ -18,16 +18,18 @@ public final class ClientConnection implements Runnable {
     private final HttpRequestHandler handler;
     private final WebServer.Observer observer;
     private final RequestGuard requestGuard;
+    private final boolean requestAlreadyChecked;
     private final Runnable onClosed;
     private final String clientIp;
 
     public ClientConnection(Socket socket, HttpRequestHandler handler, WebServer.Observer observer,
-                            RequestGuard requestGuard,
+                            RequestGuard requestGuard, boolean requestAlreadyChecked,
                             Runnable onClosed) {
         this.socket = socket;
         this.handler = handler;
         this.observer = observer;
         this.requestGuard = requestGuard;
+        this.requestAlreadyChecked = requestAlreadyChecked;
         this.onClosed = onClosed;
         this.clientIp = socket.getInetAddress().getHostAddress();
     }
@@ -61,13 +63,15 @@ public final class ClientConnection implements Runnable {
             method = parts[0];
             target = parts[1];
             String userAgent = consumeHeaders(reader);
-            RequestGuard.Decision decision = requestGuard.checkRequest(clientIp, userAgent);
-            if (decision != RequestGuard.Decision.ALLOW) {
-                statusCode = 429;
-                observer.onRequestRejected(clientIp, decision);
-                write(writer, new HttpResponse(429, "Too Many Requests", "text/plain; charset=UTF-8",
-                        "Too Many Requests\n".getBytes(StandardCharsets.UTF_8)));
-                return;
+            if (!requestAlreadyChecked) {
+                RequestGuard.Decision decision = requestGuard.checkRequest(clientIp, userAgent);
+                if (decision != RequestGuard.Decision.ALLOW) {
+                    statusCode = 429;
+                    observer.onRequestRejected(clientIp, decision);
+                    write(writer, new HttpResponse(429, "Too Many Requests", "text/plain; charset=UTF-8",
+                            "Too Many Requests\n".getBytes(StandardCharsets.UTF_8)));
+                    return;
+                }
             }
             HttpResponse response = handler.handle(method, target);
             statusCode = response.statusCode();

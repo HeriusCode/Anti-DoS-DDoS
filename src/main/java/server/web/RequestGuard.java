@@ -45,8 +45,20 @@ public final class RequestGuard {
 
     /** Apply the per-client limit after the HTTP headers identify local lab traffic. */
     public Decision checkRequest(String ip, String userAgent) {
+        return checkKey(clientKey(ip, userAgent));
+    }
+
+    /** Remote LAN clients can be limited before they occupy the HTTP worker queue. */
+    public boolean canCheckBeforeHeaders(String ip) {
+        return !isLocalAddress(ip);
+    }
+
+    public Decision checkRequestByIp(String ip) {
+        return checkKey(ip);
+    }
+
+    private Decision checkKey(String key) {
         if (!protectionEnabled || !rateLimitActive) return Decision.ALLOW;
-        String key = clientKey(ip, userAgent);
         return clients.computeIfAbsent(key, ignored -> new ClientWindow())
                 .check(System.nanoTime(), config.getRateLimit(),
                         blockingActive && config.isAutoDefense(), config.getBlockDuration().toNanos());
@@ -64,6 +76,19 @@ public final class RequestGuard {
             remaining = Math.max(remaining, blockRemainingSeconds(ip + "|browser", now));
         }
         return remaining;
+    }
+
+    /** Immediately blocks one detected source IP for the configured temporary duration. */
+    public boolean blockClient(String ip) {
+        if (!protectionEnabled || !blockingActive || ip == null || ip.isBlank()) return false;
+        long now = System.nanoTime();
+        long duration = config.getBlockDuration().toNanos();
+        if (isLocalAddress(ip)) {
+            // Keep the local browser usable while blocking the lab simulator quota.
+            return clients.computeIfAbsent(ip + "|lab-simulator", ignored -> new ClientWindow())
+                    .forceBlock(now, duration);
+        }
+        return clients.computeIfAbsent(ip, ignored -> new ClientWindow()).forceBlock(now, duration);
     }
 
     private long blockRemainingSeconds(String key, long now) {
@@ -150,6 +175,12 @@ public final class RequestGuard {
             if (blockedUntilNanos == 0) return 0;
             long remaining = blockedUntilNanos - now;
             return remaining <= 0 ? 0 : (remaining + WINDOW_NANOS - 1) / WINDOW_NANOS;
+        }
+
+        synchronized boolean forceBlock(long now, long blockNanos) {
+            if (blockedUntilNanos != 0 && now - blockedUntilNanos < 0) return false;
+            blockedUntilNanos = now + blockNanos;
+            return true;
         }
 
         synchronized void clearBlock() {
