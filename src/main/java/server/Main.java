@@ -16,13 +16,14 @@ import server.view.RegistrationPage;
 public final class Main extends Application {
     private DashboardController controller;
     private RegistrationPage registration;
+    private AccountService accounts;
 
     @Override
     public void start(Stage stage) throws Exception {
         Rectangle2D screen = Screen.getPrimary().getVisualBounds();
         double width = Math.min(1480, screen.getWidth() - 24);
         double height = Math.min(900, screen.getHeight() - 24);
-        AccountService accounts = new AccountService(DatabaseConfig.load());
+        accounts = new AccountService(DatabaseConfig.load());
         registration = new RegistrationPage(accounts, username -> openDashboard(stage, username));
         Scene scene = new Scene(registration, width, height);
         scene.getStylesheets().add(
@@ -41,11 +42,23 @@ public final class Main extends Application {
 
     private void openDashboard(Stage stage, String username) {
         registration.close();
+        registration = null;
         controller = new DashboardController(ServerConfig.defaults());
-        stage.getScene().setRoot(new Dashboard(controller));
+        stage.getScene().setRoot(new Dashboard(controller, () -> showLogin(stage)));
         stage.setTitle("DoS/DDoS Protection Server - " + username);
         controller.appendLog("INFO", "SERVER", "LOGIN", "Dashboard session started for " + username);
         controller.startUiUpdates();
+    }
+
+    private void showLogin(Stage stage) {
+        if (controller != null) {
+            controller.close();
+            controller = null;
+        }
+        if (registration != null) registration.close();
+        registration = new RegistrationPage(accounts, username -> openDashboard(stage, username));
+        stage.getScene().setRoot(registration);
+        stage.setTitle("DoS/DDoS Protection Server - Login");
     }
 
     private void closeResources() {

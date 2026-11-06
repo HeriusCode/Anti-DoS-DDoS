@@ -26,9 +26,9 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.effect.DropShadow;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.SVGPath;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.shape.Circle;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Stage;
@@ -68,8 +68,12 @@ public final class RegistrationPage extends BorderPane implements AutoCloseable 
         getStylesheets().add(RegistrationPage.class.getResource("/server/view/auth.css").toExternalForm());
         setTop(windowBar());
 
-        CyberArtwork artwork = new CyberArtwork();
+        StackPane artwork = createArtwork();
         HBox.setHgrow(artwork, Priority.ALWAYS);
+        // The source PNG is 1536x1536. An explicit zero minimum prevents its
+        // intrinsic size from consuming the whole HBox and pushing the form
+        // outside the window.
+        artwork.setMinSize(0, 0);
         artwork.setPrefSize(620, 700);
         artwork.setMaxWidth(760);
 
@@ -133,7 +137,10 @@ public final class RegistrationPage extends BorderPane implements AutoCloseable 
         socialPrompt.getStyleClass().add("auth-secondary-text");
         HBox separator = new HBox(14, line1, socialPrompt, line2);
         separator.setAlignment(Pos.CENTER);
-        HBox social = new HBox(22, socialButton("Google", "fab-google"), socialButton("GitHub", "fab-github"));
+        HBox social = new HBox(22,
+                socialButton("Google", circularAssetImage("gg.png", 27,
+                        "auth-social-image")),
+                socialButton("GitHub", UiIcons.icon("fab-github", "auth-social-icon")));
         social.setAlignment(Pos.CENTER);
         switchMode.getStyleClass().add("auth-mode-link");
         switchMode.setId("account-switch-mode");
@@ -190,8 +197,9 @@ public final class RegistrationPage extends BorderPane implements AutoCloseable 
         databaseBar.setPadding(new Insets(0, 14, 10, 14));
         databaseBar.getStyleClass().add("auth-database-bar");
         setBottom(databaseBar);
-        setLoginMode(false);
-        checkDatabase();
+        setLoginMode(true);
+        // Paint the login screen before starting PostgreSQL discovery.
+        Platform.runLater(this::checkDatabase);
     }
 
     private HBox windowBar() {
@@ -221,29 +229,83 @@ public final class RegistrationPage extends BorderPane implements AutoCloseable 
     }
 
     private Node createEmblem() {
-        SVGPath shield = new SVGPath();
-        shield.setContent("M45 3 L84 19 L80 58 Q74 80 45 97 Q16 80 10 58 L6 19 Z");
-        shield.setFill(Color.web("#043578"));
-        shield.setStroke(Color.web("#08d9ff"));
-        shield.setStrokeWidth(3);
-        shield.setEffect(new DropShadow(18, Color.web("#007bff")));
-        SVGPath hood = new SVGPath();
-        hood.setContent("M19 59 L25 38 L45 20 L65 38 L71 59 L60 75 L45 88 L30 75 Z");
-        hood.setFill(Color.web("#010915"));
-        hood.setStroke(Color.web("#0787da"));
-        hood.setStrokeWidth(1.5);
-        SVGPath eyes = new SVGPath();
-        eyes.setContent("M29 50 L41 56 L37 60 L32 57 Z M61 50 L49 56 L53 60 L58 57 Z");
-        eyes.setFill(Color.web("#03d7ff"));
-        eyes.setEffect(new DropShadow(9, Color.web("#009dff")));
-        // Group keeps the shared SVG coordinates so the eyes remain inside the hood.
-        javafx.scene.Group drawing = new javafx.scene.Group(shield, hood, eyes);
-        StackPane badge = new StackPane(drawing);
+        ImageView logo = assetImage("header-normal-logo-v2.png", 94, 94,
+                "auth-emblem-image");
+        StackPane badge = new StackPane(logo);
         badge.getStyleClass().add("auth-emblem");
-        badge.setMinSize(86, 100);
-        badge.setPrefSize(86, 100);
-        badge.setMaxSize(86, 100);
+        badge.setMinSize(96, 100);
+        badge.setPrefSize(96, 100);
+        badge.setMaxSize(96, 100);
         return badge;
+    }
+
+    private StackPane createArtwork() {
+        ImageView map = assetImage("blue-network-map.png", 0, 0,
+                "auth-network-map");
+        ImageView hacker = assetImage("hacker-quick-actions.png", 0, 0,
+                "auth-artwork-image");
+        map.setMouseTransparent(true);
+        hacker.setMouseTransparent(true);
+        StackPane visual = new StackPane(map, hacker);
+        visual.setMinSize(0, 0);
+        StackPane caption = createArtworkCaption();
+        VBox composition = new VBox(6, visual, caption);
+        composition.setAlignment(Pos.CENTER);
+        composition.setFillWidth(true);
+        composition.setMinSize(0, 0);
+        composition.setMaxHeight(Region.USE_PREF_SIZE);
+        VBox.setMargin(caption, new Insets(0, 18, 8, 18));
+
+        StackPane host = new StackPane(composition);
+        host.getStyleClass().add("auth-artwork-image-host");
+        host.setMinSize(0, 0);
+        visual.prefHeightProperty().bind(host.widthProperty().multiply(.55));
+        visual.maxHeightProperty().bind(host.widthProperty().multiply(.55));
+        map.fitWidthProperty().bind(visual.widthProperty().multiply(.98));
+        map.fitHeightProperty().bind(visual.heightProperty().multiply(.96));
+        hacker.fitWidthProperty().bind(visual.widthProperty().multiply(.72));
+        hacker.fitHeightProperty().bind(visual.heightProperty().multiply(.88));
+        caption.prefWidthProperty().bind(host.widthProperty().multiply(.86));
+        caption.maxWidthProperty().bind(host.widthProperty().multiply(.86));
+        return host;
+    }
+
+    private StackPane createArtworkCaption() {
+        Label title = new Label("DoS/DDoS Protection Server");
+        title.getStyleClass().add("auth-artwork-caption-title");
+        Label subtitle = new Label("Bảo vệ hệ thống · Ngăn chặn tấn công · Đảm bảo an ninh mạng");
+        subtitle.getStyleClass().add("auth-artwork-caption-subtitle");
+        VBox text = new VBox(2, title, subtitle);
+        text.setAlignment(Pos.CENTER);
+        StackPane caption = new StackPane(text);
+        caption.getStyleClass().add("auth-artwork-caption");
+        caption.setMinSize(0, 62);
+        caption.setPrefHeight(68);
+        caption.setMaxHeight(68);
+        caption.setMouseTransparent(true);
+        return caption;
+    }
+
+    private static ImageView circularAssetImage(String filename, double size,
+                                                String styleClass) {
+        ImageView image = assetImage(filename, size, size, styleClass);
+        image.setClip(new Circle(size / 2, size / 2, size / 2));
+        return image;
+    }
+
+    private static ImageView assetImage(String filename, double width, double height,
+                                        String styleClass) {
+        var resource = RegistrationPage.class.getResource("/server/view/assets/" + filename);
+        if (resource == null) {
+            throw new IllegalStateException("Missing authentication asset: " + filename);
+        }
+        ImageView image = new ImageView(new Image(resource.toExternalForm()));
+        image.setSmooth(true);
+        image.setPreserveRatio(true);
+        if (width > 0) image.setFitWidth(width);
+        if (height > 0) image.setFitHeight(height);
+        image.getStyleClass().add(styleClass);
+        return image;
     }
 
     private Button windowButton(String icon, String name) {
@@ -294,8 +356,8 @@ public final class RegistrationPage extends BorderPane implements AutoCloseable 
         return row;
     }
 
-    private Button socialButton(String text, String icon) {
-        Button button = UiIcons.graphic(new Button(text), icon, "auth-social-icon");
+    private Button socialButton(String text, Node graphic) {
+        Button button = new Button(text, graphic);
         button.getStyleClass().add("auth-social-button");
         button.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(button, Priority.ALWAYS);
@@ -347,7 +409,6 @@ public final class RegistrationPage extends BorderPane implements AutoCloseable 
         };
         task.setOnSucceeded(event -> {
             busy.set(false);
-            databaseState.setText("● PostgreSQL đã kết nối · Tài khoản được bảo vệ");
             if (login) onAuthenticated.accept(task.getValue());
             else {
                 username.setText(task.getValue());

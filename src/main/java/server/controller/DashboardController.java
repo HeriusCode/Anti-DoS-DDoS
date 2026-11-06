@@ -128,7 +128,11 @@ public final class DashboardController implements AutoCloseable {
         return startServer(serverIp.get(), port);
     }
 
-    /** Starts the server on a selected IPv4 address owned by this machine. */
+    /**
+     * Starts the server for the selected lab IPv4 address. The selected
+     * address is advertised in the UI, while the TCP listener binds to every
+     * local interface so VMware Host-only clients can reach it reliably.
+     */
     public boolean startServer(String ipAddress, int port) {
         if (serverRunning.get()) {
             return true;
@@ -136,14 +140,15 @@ public final class DashboardController implements AutoCloseable {
         try {
             Inet4Address bindAddress = requireLocalLabAddress(ipAddress);
             config.setServerPort(port);
-            webServer.start(bindAddress.getHostAddress(), port);
+            webServer.start("0.0.0.0", port);
             serverIp.set(bindAddress.getHostAddress());
             serverPort.set(port);
             startedAt = Instant.now();
             serverRunning.set(true);
             detectionReason.set("Traffic is within configured limits");
             appendLog("INFO", "SERVER", "SERVER_STARTED",
-                    "Listening on " + bindAddress.getHostAddress() + ":" + port);
+                    "Listening on 0.0.0.0:" + port + "; lab endpoint http://"
+                            + bindAddress.getHostAddress() + ":" + port + "/");
             openServerPage();
             return true;
         } catch (IOException | IllegalArgumentException exception) {
@@ -430,7 +435,9 @@ public final class DashboardController implements AutoCloseable {
             return NetworkInterface.networkInterfaces()
                     .filter(network -> {
                         try {
-                            return network.isUp() && !network.isLoopback() && !network.isVirtual();
+                            // VMware VMnet adapters may be reported as virtual.
+                            // They are valid interfaces for this isolated lab.
+                            return network.isUp() && !network.isLoopback();
                         } catch (SocketException exception) {
                             return false;
                         }
@@ -439,11 +446,21 @@ public final class DashboardController implements AutoCloseable {
                     .filter(address -> address instanceof Inet4Address)
                     .map(address -> address.getHostAddress())
                     .filter(DashboardController::isPrivateAddress)
+                    .sorted((left, right) -> Integer.compare(
+                            labAddressPriority(left), labAddressPriority(right)))
                     .findFirst()
                     .orElse("127.0.0.1");
         } catch (SocketException exception) {
             return "127.0.0.1";
         }
+    }
+
+    private static int labAddressPriority(String address) {
+        if ("192.168.211.1".equals(address)) return 0;
+        if (address.startsWith("192.168.211.")) return 1;
+        if (address.startsWith("192.168.")) return 2;
+        if (address.startsWith("10.")) return 3;
+        return 4;
     }
 
     private static boolean isPrivateAddress(String address) {
@@ -516,7 +533,10 @@ public final class DashboardController implements AutoCloseable {
 
         @Override
         public void onRequestRejected(String ip, RequestGuard.Decision decision) {
-            if (decision == RequestGuard.Decision.LIMITED) trafficMonitor.requestLimited();
+            if (decision == RequestGuard.Decision.LIMITED
+                    || decision == RequestGuard.Decision.GLOBAL_LIMITED) {
+                trafficMonitor.requestLimited();
+            }
             else trafficMonitor.requestDropped();
             if (decision == RequestGuard.Decision.CONNECTION_LIMITED) {
                 connectionLimitRejections.incrementAndGet();
@@ -526,11 +546,16 @@ public final class DashboardController implements AutoCloseable {
             if (now - previous >= 1_000_000_000L && lastProtectionLogNanos.compareAndSet(previous, now)) {
                 String event = switch (decision) {
                     case LIMITED -> "RATE_LIMIT";
+                    case GLOBAL_LIMITED -> "GLOBAL_RATE_LIMIT";
                     case BLOCKED -> "TEMP_BLOCK";
                     case CONNECTION_LIMITED -> "CONNECTION_LIMIT";
                     case ALLOW -> "ALLOW";
                 };
-                appendLog("DEFENSE", ip, event, "Rejected excess lab traffic");
+                String description = decision == RequestGuard.Decision.GLOBAL_LIMITED
+                        ? "Aggregate traffic exceeded "
+                            + config.getRequestRateThreshold() + " req/sec"
+                        : "Rejected excess lab traffic";
+                appendLog("DEFENSE", ip, event, description);
             }
         }
 

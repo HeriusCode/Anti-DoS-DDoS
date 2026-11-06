@@ -18,7 +18,12 @@ import server.config.ServerConfig;
 
 /** Multi-client TCP server with basic HTTP/1.1 GET handling. */
 public final class WebServer implements AutoCloseable {
-    private static final int BACKLOG = 128;
+    /**
+     * Keep enough pending TCP handshakes for short Mininet bursts. Admission
+     * control still happens in RequestGuard after accept(), so increasing the
+     * kernel backlog does not bypass any protection rule.
+     */
+    private static final int BACKLOG = ServerConfig.MAX_ACTIVE_CONNECTIONS;
     private static final int WORKER_COUNT = Math.max(8,
             Math.min(32, Runtime.getRuntime().availableProcessors() * 2));
 

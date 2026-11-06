@@ -1,6 +1,7 @@
 package server.view;
 
 import java.util.Random;
+import javafx.scene.CacheHint;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.effect.DropShadow;
@@ -21,6 +22,8 @@ public final class CyberArtwork extends Region {
 
     public CyberArtwork() {
         setMinSize(0, 0);
+        setCache(true);
+        setCacheHint(CacheHint.SPEED);
         getChildren().add(canvas);
     }
 

@@ -14,12 +14,24 @@ public final class RequestGuard {
     private static final int BLOCK_AFTER_EXCESS = 3;
     private static final String LAB_SIMULATOR_USER_AGENT = "Academic-Lab-Simulator/1.0";
 
-    public enum Decision { ALLOW, LIMITED, BLOCKED, CONNECTION_LIMITED }
+    public enum Decision {
+        ALLOW,
+        LIMITED,
+        GLOBAL_LIMITED,
+        BLOCKED,
+        CONNECTION_LIMITED
+    }
 
     private final ServerConfig config;
     private final Set<String> localAddresses;
     private final AtomicInteger activeConnections = new AtomicInteger();
     private final ConcurrentHashMap<String, ClientWindow> clients = new ConcurrentHashMap<>();
+    /**
+     * One shared admission window for all remote/simulator sources. Without
+     * this window, many DDoS nodes can each stay below the per-client limit
+     * while their aggregate traffic still overwhelms the worker pool.
+     */
+    private final ClientWindow globalRequests = new ClientWindow();
     private volatile boolean protectionEnabled = true;
     private volatile boolean rateLimitActive = true;
     private volatile boolean connectionLimitActive = true;
@@ -45,7 +57,8 @@ public final class RequestGuard {
 
     /** Apply the per-client limit after the HTTP headers identify local lab traffic. */
     public Decision checkRequest(String ip, String userAgent) {
-        return checkKey(clientKey(ip, userAgent));
+        boolean trustedLocalBrowser = isLocalAddress(ip) && !isLabSimulator(userAgent);
+        return checkKey(clientKey(ip, userAgent), !trustedLocalBrowser);
     }
 
     /** Remote LAN clients can be limited before they occupy the HTTP worker queue. */
@@ -54,14 +67,21 @@ public final class RequestGuard {
     }
 
     public Decision checkRequestByIp(String ip) {
-        return checkKey(ip);
+        return checkKey(ip, true);
     }
 
-    private Decision checkKey(String key) {
+    private Decision checkKey(String key, boolean applyGlobalLimit) {
         if (!protectionEnabled || !rateLimitActive) return Decision.ALLOW;
-        return clients.computeIfAbsent(key, ignored -> new ClientWindow())
-                .check(System.nanoTime(), config.getRateLimit(),
+        long now = System.nanoTime();
+        Decision clientDecision = clients.computeIfAbsent(key, ignored -> new ClientWindow())
+                .check(now, config.getRateLimit(),
                         blockingActive && config.isAutoDefense(), config.getBlockDuration().toNanos());
+        if (clientDecision != Decision.ALLOW || !applyGlobalLimit) {
+            return clientDecision;
+        }
+
+        Decision globalDecision = globalRequests.check(now, config.getRequestRateThreshold(), false, 0);
+        return globalDecision == Decision.ALLOW ? Decision.ALLOW : Decision.GLOBAL_LIMITED;
     }
 
     public void leave() {
@@ -131,12 +151,12 @@ public final class RequestGuard {
 
     public void setProtectionEnabled(boolean enabled) {
         protectionEnabled = enabled;
-        if (!enabled) clients.clear();
+        if (!enabled) resetRateWindows();
     }
 
     public void setRateLimitActive(boolean enabled) {
         rateLimitActive = enabled;
-        if (!enabled) clients.clear();
+        if (!enabled) resetRateWindows();
     }
     public void setConnectionLimitActive(boolean enabled) { connectionLimitActive = enabled; }
     public void setBlockingActive(boolean enabled) {
@@ -144,8 +164,13 @@ public final class RequestGuard {
         if (!enabled) clearBlocks();
     }
     public void clearBlocks() { clients.values().forEach(ClientWindow::clearBlock); }
-    public void reset() { clients.clear(); }
+    public void reset() { resetRateWindows(); }
     void resetConnections() { activeConnections.set(0); }
+
+    private void resetRateWindows() {
+        clients.clear();
+        globalRequests.reset();
+    }
 
     private static final class ClientWindow {
         private long windowStartNanos;
@@ -186,6 +211,13 @@ public final class RequestGuard {
         synchronized void clearBlock() {
             blockedUntilNanos = 0;
             excess = 0;
+        }
+
+        synchronized void reset() {
+            windowStartNanos = 0;
+            admitted = 0;
+            excess = 0;
+            blockedUntilNanos = 0;
         }
     }
 }

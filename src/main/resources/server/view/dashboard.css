@@ -116,6 +116,24 @@
 .sidebar-shield { -fx-icon-size: 58px; -fx-icon-color: #01daf4; -fx-effect: dropshadow(gaussian, #008eb7, 18, .4, 0, 0); }
 .sidebar-secure { -fx-font-weight: bold; -fx-text-fill: #19d9fb; }
 .sidebar-motto { -fx-font-size: 9px; -fx-text-fill: #29a8d4; }
+.sidebar-logout {
+    -fx-background-color: rgba(2, 30, 48, .92);
+    -fx-border-color: #087ea7;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-text-fill: #66dff4;
+    -fx-font-family: "Consolas";
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 8px 14px;
+    -fx-cursor: hand;
+}
+.sidebar-logout:hover {
+    -fx-background-color: rgba(0, 164, 201, .20);
+    -fx-border-color: #20dff7;
+    -fx-text-fill: white;
+}
+.sidebar-logout-icon { -fx-icon-size: 13px; -fx-icon-color: #35dff4; }
 
 .content-scroll, .content-scroll > .viewport {
     -fx-background-color: transparent;
