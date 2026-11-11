@@ -18,7 +18,12 @@ import server.config.ServerConfig;
 
 /** Multi-client TCP server with basic HTTP/1.1 GET handling. */
 public final class WebServer implements AutoCloseable {
-    private static final int BACKLOG = 128;
+    /**
+     * Keep enough pending TCP handshakes for short Mininet bursts. Admission
+     * control still happens in RequestGuard after accept(), so increasing the
+     * kernel backlog does not bypass any protection rule.
+     */
+    private static final int BACKLOG = ServerConfig.MAX_ACTIVE_CONNECTIONS;
     private static final int WORKER_COUNT = Math.max(8,
             Math.min(32, Runtime.getRuntime().availableProcessors() * 2));
 
@@ -91,9 +96,28 @@ public final class WebServer implements AutoCloseable {
                     }
                     continue;
                 }
+
+                boolean requestPrechecked = requestGuard.canCheckBeforeHeaders(ip);
+                if (requestPrechecked) {
+                    RequestGuard.Decision rateDecision = requestGuard.checkRequestByIp(ip);
+                    if (rateDecision != RequestGuard.Decision.ALLOW) {
+                        // This connection never enters the expensive/general worker queue.
+                        requestGuard.leave();
+                        try {
+                            rejectExecutor.execute(() -> reject(client, ip, rateDecision, started));
+                        } catch (RejectedExecutionException exception) {
+                            observer.onRequestRejected(ip, rateDecision);
+                            observer.onRequestCompleted(ip, "REJECTED", "-", 429,
+                                    System.nanoTime() - started);
+                            observer.onConnectionClosed(ip);
+                            client.close();
+                        }
+                        continue;
+                    }
+                }
                 try {
                     workerExecutor.execute(new ClientConnection(client, requestHandler, observer,
-                            requestGuard, requestGuard::leave));
+                            requestGuard, requestPrechecked, requestGuard::leave));
                 } catch (RejectedExecutionException exception) {
                     requestGuard.leave();
                     try {

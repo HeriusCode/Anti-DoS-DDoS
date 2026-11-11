@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import javafx.animation.KeyFrame;
@@ -41,6 +42,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import server.config.ServerConfig;
 import server.detection.AttackStatus;
+import server.detection.DoSDetector;
 import server.model.ClientInfo;
 import server.model.ProtectionStatus;
 import server.monitor.TrafficMonitor;
@@ -56,6 +58,7 @@ public final class DashboardController implements AutoCloseable {
 
     private final ServerConfig config;
     private final TrafficMonitor trafficMonitor = new TrafficMonitor();
+    private final DoSDetector dosDetector;
     private final RequestGuard requestGuard;
     private final WebServer webServer;
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -102,11 +105,13 @@ public final class DashboardController implements AutoCloseable {
     private long previousChartLimited;
     private long previousChartDropped;
     private AttackStatus previousStatus = AttackStatus.NORMAL;
+    private String detectedClientIp;
 
     public DashboardController(ServerConfig config) {
         this.config = config;
         this.serverPort = new SimpleIntegerProperty(config.getServerPort());
         this.autoDefense.set(config.isAutoDefense());
+        this.dosDetector = new DoSDetector(config);
         this.requestGuard = new RequestGuard(config);
         this.webServer = new WebServer(new ServerObserver(), requestGuard);
         appendLog("INFO", "SERVER", "APPLICATION_STARTED", "Dashboard initialized; server is stopped");
@@ -123,7 +128,11 @@ public final class DashboardController implements AutoCloseable {
         return startServer(serverIp.get(), port);
     }
 
-    /** Starts the server on a selected IPv4 address owned by this machine. */
+    /**
+     * Starts the server for the selected lab IPv4 address. The selected
+     * address is advertised in the UI, while the TCP listener binds to every
+     * local interface so VMware Host-only clients can reach it reliably.
+     */
     public boolean startServer(String ipAddress, int port) {
         if (serverRunning.get()) {
             return true;
@@ -131,14 +140,15 @@ public final class DashboardController implements AutoCloseable {
         try {
             Inet4Address bindAddress = requireLocalLabAddress(ipAddress);
             config.setServerPort(port);
-            webServer.start(bindAddress.getHostAddress(), port);
+            webServer.start("0.0.0.0", port);
             serverIp.set(bindAddress.getHostAddress());
             serverPort.set(port);
             startedAt = Instant.now();
             serverRunning.set(true);
             detectionReason.set("Traffic is within configured limits");
             appendLog("INFO", "SERVER", "SERVER_STARTED",
-                    "Listening on " + bindAddress.getHostAddress() + ":" + port);
+                    "Listening on 0.0.0.0:" + port + "; lab endpoint http://"
+                            + bindAddress.getHostAddress() + ":" + port + "/");
             openServerPage();
             return true;
         } catch (IOException | IllegalArgumentException exception) {
@@ -183,6 +193,7 @@ public final class DashboardController implements AutoCloseable {
         activeConnections.set(0);
         attackStatus.set(AttackStatus.NORMAL);
         previousStatus = AttackStatus.NORMAL;
+        detectedClientIp = null;
         detectionReason.set("Server is stopped");
         appendLog("INFO", "SERVER", "SERVER_STOPPED", "TCP listener and worker pool stopped");
     }
@@ -229,6 +240,7 @@ public final class DashboardController implements AutoCloseable {
         clients.clear();
         attackStatus.set(AttackStatus.NORMAL);
         previousStatus = AttackStatus.NORMAL;
+        detectedClientIp = null;
         detectionReason.set(serverRunning.get() ? "Statistics have been reset" : "Server is stopped");
         appendLog("INFO", "SERVER", "RESET", "Traffic statistics cleared");
     }
@@ -268,6 +280,9 @@ public final class DashboardController implements AutoCloseable {
         config.setAutoDefense(enabled);
         if (!enabled) requestGuard.clearBlocks();
         appendLog("INFO", "SERVER", "AUTO_DEFENSE", enabled ? "Auto Defense ON" : "Auto Defense OFF");
+        if (enabled && attackStatus.get() == AttackStatus.ATTACK_DETECTED) {
+            activateAutomaticDefense(detectedClientIp);
+        }
     }
 
     private void updateProtectionSwitch(BooleanProperty property, boolean enabled,
@@ -316,18 +331,24 @@ public final class DashboardController implements AutoCloseable {
 
         int rps = (int) Math.ceil(statistics.requestsPerSecond());
         requestsPerSecond.set(rps);
-        clients.setAll(trafficMonitor.clientSnapshots(config.getPerClientRateThreshold()).stream()
+        List<ClientInfo> clientSnapshots = trafficMonitor
+                .clientSnapshots(config.getPerClientRateThreshold()).stream()
                 .map(client -> {
                     long remaining = requestGuard.blockRemainingSeconds(client.ipAddress());
+                    boolean blocked = remaining > 0;
                     return new ClientInfo(client.ipAddress(), client.totalRequests(), client.requestsPerSecond(),
-                            client.activeConnections(), client.status(), remaining > 0, remaining);
-                }).toList());
+                            client.activeConnections(), blocked ? AttackStatus.ATTACK_DETECTED : client.status(),
+                            blocked, remaining);
+                }).toList();
+        clients.setAll(clientSnapshots);
 
-        AttackStatus next = classify(rps);
+        DoSDetector.Result detection = dosDetector.evaluate(statistics, clientSnapshots);
+        AttackStatus next = detection.status();
         attackStatus.set(next);
-        updateDetectionText(next, rps);
+        detectionReason.set(detection.reason());
+        detectedClientIp = detection.clientIp();
         if (next != previousStatus) {
-            logTransition(next, rps);
+            logTransition(detection);
             previousStatus = next;
         }
 
@@ -352,35 +373,35 @@ public final class DashboardController implements AutoCloseable {
         }
     }
 
-    private AttackStatus classify(int rps) {
-        if (rps >= config.getRequestRateThreshold()) {
-            return AttackStatus.ATTACK_DETECTED;
-        }
-        if (rps >= Math.round(config.getRequestRateThreshold() * 0.7)) {
-            return AttackStatus.SUSPICIOUS;
-        }
-        return AttackStatus.NORMAL;
-    }
-
-    private void updateDetectionText(AttackStatus status, int rps) {
-        switch (status) {
-            case NORMAL -> detectionReason.set("Traffic is within configured limits");
-            case SUSPICIOUS -> detectionReason.set("Request rate is approaching the threshold (" + rps + " req/s)");
-            case ATTACK_DETECTED -> detectionReason.set("High request rate detected (" + rps + " req/s)");
-        }
-    }
-
-    private void logTransition(AttackStatus status, int rps) {
-        switch (status) {
+    private void logTransition(DoSDetector.Result detection) {
+        String source = detection.clientIp() == null ? topClientIp() : detection.clientIp();
+        switch (detection.status()) {
             case NORMAL -> appendLog("INFO", "SERVER", "NORMAL", "Traffic returned to normal");
-            case SUSPICIOUS -> appendLog("WARNING", topClientIp(), "SUSPICIOUS", "High traffic: " + rps + " req/s");
+            case SUSPICIOUS -> appendLog("WARNING", source, "SUSPICIOUS", detection.reason());
             case ATTACK_DETECTED -> {
                 detectedAt.set(clock.get());
-                appendLog("ALERT", topClientIp(), "ATTACK_DETECTED", "Request-rate threshold exceeded");
-                if (autoDefense.get() && protectionEnabled.get() && rateLimitActive.get()) {
-                    appendLog("DEFENSE", topClientIp(), "RATE_LIMIT", "Rate limiting is active");
-                }
+                appendLog("ALERT", source, "ATTACK_DETECTED", detection.reason());
+                activateAutomaticDefense(detection.clientIp());
             }
+        }
+    }
+
+    private void activateAutomaticDefense(String clientIp) {
+        if (!autoDefense.get()) return;
+
+        if (!protectionEnabled.get()) {
+            requestGuard.setProtectionEnabled(true);
+            protectionEnabled.set(true);
+        }
+        setRateLimitActive(true);
+        setConnectionLimitActive(true);
+        setBlockingActive(true);
+        appendLog("DEFENSE", clientIp == null ? "SERVER" : clientIp,
+                "AUTO_DEFENSE", "Rate and connection limiting activated automatically");
+
+        if (clientIp != null && requestGuard.blockClient(clientIp)) {
+            appendLog("DEFENSE", clientIp, "TEMP_BLOCK",
+                    "Client blocked for " + config.getBlockDuration().toSeconds() + " seconds");
         }
     }
 
@@ -414,7 +435,9 @@ public final class DashboardController implements AutoCloseable {
             return NetworkInterface.networkInterfaces()
                     .filter(network -> {
                         try {
-                            return network.isUp() && !network.isLoopback() && !network.isVirtual();
+                            // VMware VMnet adapters may be reported as virtual.
+                            // They are valid interfaces for this isolated lab.
+                            return network.isUp() && !network.isLoopback();
                         } catch (SocketException exception) {
                             return false;
                         }
@@ -423,11 +446,21 @@ public final class DashboardController implements AutoCloseable {
                     .filter(address -> address instanceof Inet4Address)
                     .map(address -> address.getHostAddress())
                     .filter(DashboardController::isPrivateAddress)
+                    .sorted((left, right) -> Integer.compare(
+                            labAddressPriority(left), labAddressPriority(right)))
                     .findFirst()
                     .orElse("127.0.0.1");
         } catch (SocketException exception) {
             return "127.0.0.1";
         }
+    }
+
+    private static int labAddressPriority(String address) {
+        if ("192.168.211.1".equals(address)) return 0;
+        if (address.startsWith("192.168.211.")) return 1;
+        if (address.startsWith("192.168.")) return 2;
+        if (address.startsWith("10.")) return 3;
+        return 4;
     }
 
     private static boolean isPrivateAddress(String address) {
@@ -500,7 +533,10 @@ public final class DashboardController implements AutoCloseable {
 
         @Override
         public void onRequestRejected(String ip, RequestGuard.Decision decision) {
-            if (decision == RequestGuard.Decision.LIMITED) trafficMonitor.requestLimited();
+            if (decision == RequestGuard.Decision.LIMITED
+                    || decision == RequestGuard.Decision.GLOBAL_LIMITED) {
+                trafficMonitor.requestLimited();
+            }
             else trafficMonitor.requestDropped();
             if (decision == RequestGuard.Decision.CONNECTION_LIMITED) {
                 connectionLimitRejections.incrementAndGet();
@@ -510,11 +546,16 @@ public final class DashboardController implements AutoCloseable {
             if (now - previous >= 1_000_000_000L && lastProtectionLogNanos.compareAndSet(previous, now)) {
                 String event = switch (decision) {
                     case LIMITED -> "RATE_LIMIT";
+                    case GLOBAL_LIMITED -> "GLOBAL_RATE_LIMIT";
                     case BLOCKED -> "TEMP_BLOCK";
                     case CONNECTION_LIMITED -> "CONNECTION_LIMIT";
                     case ALLOW -> "ALLOW";
                 };
-                appendLog("DEFENSE", ip, event, "Rejected excess lab traffic");
+                String description = decision == RequestGuard.Decision.GLOBAL_LIMITED
+                        ? "Aggregate traffic exceeded "
+                            + config.getRequestRateThreshold() + " req/sec"
+                        : "Rejected excess lab traffic";
+                appendLog("DEFENSE", ip, event, description);
             }
         }
 

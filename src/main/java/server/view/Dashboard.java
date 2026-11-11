@@ -28,24 +28,20 @@ public final class Dashboard extends BorderPane {
     private HBox headerNavigation;
     private VBox sidebarView;
     private final Node dashboardPage;
-    private final Node serverInfoPage;
-    private final Node trafficMonitorPage;
-    private final Node detectionPage;
-    private final Node protectionPage;
-    private final Node logsPage;
-    private final Node settingsPage;
+    private Node serverInfoPage;
+    private Node trafficMonitorPage;
+    private Node detectionPage;
+    private Node protectionPage;
+    private Node logsPage;
+    private Node settingsPage;
+    private final Runnable onLogout;
     private double dragOffsetX;
     private double dragOffsetY;
 
-    public Dashboard(DashboardController controller) {
+    public Dashboard(DashboardController controller, Runnable onLogout) {
         this.controller = controller;
+        this.onLogout = onLogout;
         this.dashboardPage = createContent();
-        this.serverInfoPage = new ServerInfoPage(controller);
-        this.trafficMonitorPage = new TrafficMonitorPage(controller);
-        this.detectionPage = new DetectionPage(controller);
-        this.protectionPage = new ProtectionPage(controller);
-        this.logsPage = new LogsPage(controller);
-        this.settingsPage = new SettingsPage(controller);
         getStyleClass().add("dashboard-root");
         setTop(createHeader());
         setLeft(createSidebar());
@@ -126,12 +122,30 @@ public final class Dashboard extends BorderPane {
         Node logs = menuItem("fas-file-alt", "Logs", "Security logs", false);
         Node settings = menuItem("fas-cog", "Settings", "Configuration", false);
         dashboard.setOnMouseClicked(event -> showPage(dashboardPage, dashboard));
-        serverInfo.setOnMouseClicked(event -> showPage(serverInfoPage, serverInfo));
-        traffic.setOnMouseClicked(event -> showPage(trafficMonitorPage, traffic));
-        detection.setOnMouseClicked(event -> showPage(detectionPage, detection));
-        protection.setOnMouseClicked(event -> showPage(protectionPage, protection));
-        logs.setOnMouseClicked(event -> showPage(logsPage, logs));
-        settings.setOnMouseClicked(event -> showPage(settingsPage, settings));
+        serverInfo.setOnMouseClicked(event -> {
+            if (serverInfoPage == null) serverInfoPage = new ServerInfoPage(controller);
+            showPage(serverInfoPage, serverInfo);
+        });
+        traffic.setOnMouseClicked(event -> {
+            if (trafficMonitorPage == null) trafficMonitorPage = new TrafficMonitorPage(controller);
+            showPage(trafficMonitorPage, traffic);
+        });
+        detection.setOnMouseClicked(event -> {
+            if (detectionPage == null) detectionPage = new DetectionPage(controller);
+            showPage(detectionPage, detection);
+        });
+        protection.setOnMouseClicked(event -> {
+            if (protectionPage == null) protectionPage = new ProtectionPage(controller);
+            showPage(protectionPage, protection);
+        });
+        logs.setOnMouseClicked(event -> {
+            if (logsPage == null) logsPage = new LogsPage(controller);
+            showPage(logsPage, logs);
+        });
+        settings.setOnMouseClicked(event -> {
+            if (settingsPage == null) settingsPage = new SettingsPage(controller);
+            showPage(settingsPage, settings);
+        });
         VBox menu = new VBox(2, dashboard, serverInfo, traffic, detection, protection, logs, settings);
 
         Node shield = UiIcons.icon("fas-shield-alt", "sidebar-shield");
@@ -139,10 +153,15 @@ public final class Dashboard extends BorderPane {
         secure.getStyleClass().add("sidebar-secure");
         Label motto = new Label("MONITOR  •  DETECT  •  PROTECT");
         motto.getStyleClass().add("sidebar-motto");
+        Button logout = UiIcons.graphic(new Button("ĐĂNG XUẤT"),
+                "fas-sign-out-alt", "sidebar-logout-icon");
+        logout.getStyleClass().add("sidebar-logout");
+        logout.setMaxWidth(Double.MAX_VALUE);
+        logout.setOnAction(event -> onLogout.run());
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
-        sidebarView = new VBox(12, menu, spacer, shield, secure, motto);
+        sidebarView = new VBox(12, menu, spacer, shield, secure, motto, logout);
         sidebarView.setAlignment(Pos.TOP_CENTER);
         sidebarView.setPadding(new Insets(18, 12, 24, 12));
         sidebarView.setMinWidth(158);
