@@ -759,6 +759,16 @@
     -fx-padding: 2 7 2 7;
 }
 .block-action-icon { -fx-icon-size: 8px; -fx-icon-color: #ff6a83; }
+.unblock-action-button {
+    -fx-background-color: rgba(0, 141, 120, .22);
+    -fx-border-color: #00d9b7;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-text-fill: #38f3d2;
+    -fx-font-size: 8px;
+    -fx-padding: 2 7 2 7;
+}
+.unblock-action-button .block-action-icon { -fx-icon-color: #38f3d2; }
 .detection-log-list .list-cell { -fx-padding: 3 6 3 6; }
 
 /* Anti-DoS / Protection page */

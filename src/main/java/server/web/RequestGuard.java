@@ -19,6 +19,7 @@ public final class RequestGuard {
         LIMITED,
         GLOBAL_LIMITED,
         BLOCKED,
+        MANUALLY_BLOCKED,
         CONNECTION_LIMITED
     }
 
@@ -26,6 +27,7 @@ public final class RequestGuard {
     private final Set<String> localAddresses;
     private final AtomicInteger activeConnections = new AtomicInteger();
     private final ConcurrentHashMap<String, ClientWindow> clients = new ConcurrentHashMap<>();
+    private final Set<String> manuallyBlockedIps = ConcurrentHashMap.newKeySet();
     /**
      * One shared admission window for all remote/simulator sources. Without
      * this window, many DDoS nodes can each stay below the per-client limit
@@ -43,6 +45,7 @@ public final class RequestGuard {
     }
 
     public Decision enter(String ip) {
+        if (isManuallyBlocked(ip)) return Decision.MANUALLY_BLOCKED;
         if (protectionEnabled && connectionLimitActive) {
             while (true) {
                 int active = activeConnections.get();
@@ -57,6 +60,7 @@ public final class RequestGuard {
 
     /** Apply the per-client limit after the HTTP headers identify local lab traffic. */
     public Decision checkRequest(String ip, String userAgent) {
+        if (isManuallyBlocked(ip)) return Decision.MANUALLY_BLOCKED;
         boolean trustedLocalBrowser = isLocalAddress(ip) && !isLabSimulator(userAgent);
         return checkKey(clientKey(ip, userAgent), !trustedLocalBrowser);
     }
@@ -67,6 +71,7 @@ public final class RequestGuard {
     }
 
     public Decision checkRequestByIp(String ip) {
+        if (isManuallyBlocked(ip)) return Decision.MANUALLY_BLOCKED;
         return checkKey(ip, true);
     }
 
@@ -89,6 +94,7 @@ public final class RequestGuard {
     }
 
     public long blockRemainingSeconds(String ip) {
+        if (isManuallyBlocked(ip)) return -1;
         long now = System.nanoTime();
         long remaining = blockRemainingSeconds(ip, now);
         if (isLocalAddress(ip)) {
@@ -109,6 +115,19 @@ public final class RequestGuard {
                     .forceBlock(now, duration);
         }
         return clients.computeIfAbsent(ip, ignored -> new ClientWindow()).forceBlock(now, duration);
+    }
+
+    /** Blocks an address until an explicit manual unblock, independently of protection switches. */
+    public boolean blockClientManually(String ip) {
+        return ip != null && !ip.isBlank() && manuallyBlockedIps.add(ip);
+    }
+
+    public boolean unblockClientManually(String ip) {
+        return ip != null && manuallyBlockedIps.remove(ip);
+    }
+
+    public boolean isManuallyBlocked(String ip) {
+        return ip != null && manuallyBlockedIps.contains(ip);
     }
 
     private long blockRemainingSeconds(String key, long now) {

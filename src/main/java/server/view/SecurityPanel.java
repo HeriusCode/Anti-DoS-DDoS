@@ -34,9 +34,7 @@ public final class SecurityPanel extends VBox {
         protection.textProperty().bind(Bindings.when(controller.protectionEnabledProperty())
                 .then("ACTIVE").otherwise("DISABLED"));
         Label attack = new Label();
-        attack.textProperty().bind(Bindings.createStringBinding(
-                () -> controller.attackStatusProperty().get().name().replace('_', ' '),
-                controller.attackStatusProperty()));
+        attack.textProperty().bind(controller.detectionStatusTextProperty());
         Label uptime = new Label();
         uptime.textProperty().bind(controller.uptimeProperty());
         HBox summary = new HBox(0,

@@ -88,8 +88,7 @@ public final class DetectionPage extends VBox {
 
         HBox hero = new HBox(18, icon, heading, spacer,
                 heroStatus("fas-exclamation-triangle", "DETECTION STATUS",
-                        Bindings.createStringBinding(() -> displayStatus(controller.attackStatusProperty().get()),
-                                controller.attackStatusProperty()), "danger"),
+                        controller.detectionStatusTextProperty(), "danger"),
                 heroStatus("fas-shield-alt", "PROTECTION STATUS",
                         Bindings.when(controller.protectionEnabledProperty()).then("ACTIVE").otherwise("DISABLED"), "active"),
                 heroToggle(),
@@ -186,8 +185,7 @@ public final class DetectionPage extends VBox {
 
     private Node createAttackCard() {
         Label state = new Label();
-        state.textProperty().bind(Bindings.createStringBinding(
-                () -> displayStatus(controller.attackStatusProperty().get()), controller.attackStatusProperty()));
+        state.textProperty().bind(controller.detectionStatusTextProperty());
         state.getStyleClass().add("attack-state-banner");
         Label reason = valueLabel(controller.detectionReasonProperty());
         Label current = valueLabel(Bindings.concat(controller.requestsPerSecondProperty(), " req/sec"));
@@ -474,14 +472,20 @@ public final class DetectionPage extends VBox {
                 block.getStyleClass().add("block-action-button");
                 block.setOnAction(event -> {
                     ClientInfo client = getItem();
-                    if (client != null) controller.appendLog("DEFENSE", client.ipAddress(),
-                            "MANUAL_BLOCK", "Manual block requested from Detection page");
+                    if (client != null) {
+                        boolean manuallyBlocked = client.blockRemainingSeconds() < 0;
+                        controller.setClientManuallyBlocked(client.ipAddress(), !manuallyBlocked);
+                    }
                 });
             }
 
             @Override
             protected void updateItem(ClientInfo client, boolean empty) {
                 super.updateItem(client, empty);
+                boolean manuallyBlocked = !empty && client != null && client.blockRemainingSeconds() < 0;
+                block.setText(manuallyBlocked ? "Unblock" : "Block");
+                block.getStyleClass().removeAll("block-action-button", "unblock-action-button");
+                block.getStyleClass().add(manuallyBlocked ? "unblock-action-button" : "block-action-button");
                 setGraphic(empty || client == null ? null : block);
             }
         };

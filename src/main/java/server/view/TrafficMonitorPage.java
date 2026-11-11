@@ -79,8 +79,7 @@ public final class TrafficMonitorPage extends VBox {
                 heroStatus("fas-shield-alt", "PROTECTION",
                         Bindings.when(controller.protectionEnabledProperty()).then("ACTIVE").otherwise("DISABLED")),
                 heroStatus("fas-exclamation-triangle", "ATTACK STATUS",
-                        Bindings.createStringBinding(() -> controller.attackStatusProperty().get().name().replace('_', ' '),
-                                controller.attackStatusProperty())),
+                        controller.detectionStatusTextProperty()),
                 heroStatus("far-clock", "UPTIME", controller.uptimeProperty()));
         hero.setAlignment(Pos.CENTER_LEFT);
         hero.setPadding(new Insets(10, 18, 10, 18));
@@ -229,9 +228,7 @@ public final class TrafficMonitorPage extends VBox {
         Label detectionTitle = new Label("DETECTION STATUS");
         detectionTitle.getStyleClass().add("traffic-detail-title");
         Label attack = new Label();
-        attack.textProperty().bind(Bindings.createStringBinding(
-                () -> controller.attackStatusProperty().get().name().replace('_', ' '),
-                controller.attackStatusProperty()));
+        attack.textProperty().bind(controller.detectionStatusTextProperty());
         attack.getStyleClass().add("traffic-attack-value");
         Label reason = new Label();
         reason.textProperty().bind(controller.detectionReasonProperty());

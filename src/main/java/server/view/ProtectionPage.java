@@ -314,8 +314,7 @@ public final class ProtectionPage extends VBox {
                 textColumnRule("Status", RuleRow::status));
         VBox.setVgrow(table, Priority.ALWAYS);
         Label attack = new Label();
-        attack.textProperty().bind(Bindings.createStringBinding(
-                () -> controller.attackStatusProperty().get().name().replace('_', ' '), controller.attackStatusProperty()));
+        attack.textProperty().bind(controller.detectionStatusTextProperty());
         attack.getStyleClass().add("protection-attack-banner");
         VBox panel = panel(6, sectionHeader("fas-cog", "DETECTION RULES"), table, attack);
         panel.setPrefWidth(390);
@@ -510,6 +509,7 @@ public final class ProtectionPage extends VBox {
     }
 
     private String clientAction(ClientInfo client) {
+        if (client.blockRemainingSeconds() < 0) return "Manually blocked";
         if (client.blocked()) return "Blocked " + client.blockRemainingSeconds() + "s";
         if (client.status() != AttackStatus.NORMAL) return "Rate limited";
         return "-";

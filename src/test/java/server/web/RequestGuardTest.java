@@ -40,6 +40,23 @@ class RequestGuardTest {
         }
     }
 
+    @Test
+    void manualBlockPersistsUntilExplicitlyUnblocked() {
+        RequestGuard guard = new RequestGuard(config(100, 100));
+        String ip = "10.0.0.9";
+
+        assertEquals(true, guard.blockClientManually(ip));
+        assertEquals(-1, guard.blockRemainingSeconds(ip));
+        assertEquals(RequestGuard.Decision.MANUALLY_BLOCKED, guard.enter(ip));
+
+        guard.setProtectionEnabled(false);
+        guard.reset();
+        assertEquals(RequestGuard.Decision.MANUALLY_BLOCKED, guard.checkRequestByIp(ip));
+
+        assertEquals(true, guard.unblockClientManually(ip));
+        assertEquals(RequestGuard.Decision.ALLOW, guard.checkRequestByIp(ip));
+    }
+
     private static ServerConfig config(int globalLimit, int perClientLimit) {
         return new ServerConfig(8080, globalLimit, 50, 100, 1_000,
                 perClientLimit, Duration.ofSeconds(30), true);

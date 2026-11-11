@@ -164,9 +164,7 @@ public final class MonitorPanel extends VBox {
         Label label = new Label("Detection Status");
         label.getStyleClass().add("detail-label");
         Label status = new Label();
-        status.textProperty().bind(Bindings.createStringBinding(
-                () -> controller.attackStatusProperty().get().name().replace('_', ' '),
-                controller.attackStatusProperty()));
+        status.textProperty().bind(controller.detectionStatusTextProperty());
         status.getStyleClass().add("detection-status");
         controller.attackStatusProperty().addListener((observable, oldValue, newValue) -> {
             status.getStyleClass().removeAll("normal-text", "warning-text", "danger-text");
@@ -176,7 +174,11 @@ public final class MonitorPanel extends VBox {
                 case ATTACK_DETECTED -> "danger-text";
             });
         });
-        status.getStyleClass().add("normal-text");
+        status.getStyleClass().add(switch (controller.attackStatusProperty().get()) {
+            case NORMAL -> "normal-text";
+            case SUSPICIOUS -> "warning-text";
+            case ATTACK_DETECTED -> "danger-text";
+        });
         Label reason = new Label();
         reason.textProperty().bind(controller.detectionReasonProperty());
         reason.setWrapText(true);
