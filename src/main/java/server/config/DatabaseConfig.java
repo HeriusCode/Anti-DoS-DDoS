@@ -28,7 +28,7 @@ public final class DatabaseConfig {
         connectionProperties.setProperty("password", value(settings, "db.password", "LAB_DB_PASSWORD", ""));
         connectionProperties.setProperty("connectTimeout", "5");
         connectionProperties.setProperty("socketTimeout", "10");
-        connectionProperties.setProperty("ApplicationName", "DoS Protection Lab Accounts");
+        connectionProperties.setProperty("ApplicationName", "DoS Protection Lab Server");
     }
 
     public static DatabaseConfig load() throws IOException {

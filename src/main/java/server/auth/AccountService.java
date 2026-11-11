@@ -8,6 +8,7 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Locale;
 import server.config.DatabaseConfig;
+import server.persistence.DatabaseSchema;
 
 /** PostgreSQL account persistence and authentication, independent from JavaFX. */
 public final class AccountService {
@@ -30,21 +31,7 @@ public final class AccountService {
                 if (!"42P04".equals(createError.getSQLState())) throw createError;
             }
         }
-        try (Connection connection = config.connect(); Statement statement = connection.createStatement()) {
-            statement.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS lab_accounts (
-                        id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                        username VARCHAR(32) NOT NULL,
-                        email VARCHAR(254) NOT NULL,
-                        password_hash VARCHAR(255) NOT NULL,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                    """);
-            statement.executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS lab_accounts_username_unique "
-                    + "ON lab_accounts (LOWER(username))");
-            statement.executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS lab_accounts_email_unique "
-                    + "ON lab_accounts (LOWER(email))");
-        }
+        DatabaseSchema.initialize(config);
         initialized = true;
     }
 

@@ -48,6 +48,7 @@ import server.model.ClientInfo;
 import server.model.ProtectionStatus;
 import server.monitor.TrafficMonitor;
 import server.monitor.TrafficStatistics;
+import server.persistence.LabDataStore;
 import server.web.RequestGuard;
 import server.web.WebServer;
 
@@ -62,6 +63,8 @@ public final class DashboardController implements AutoCloseable {
     private final DoSDetector dosDetector;
     private final RequestGuard requestGuard;
     private final WebServer webServer;
+    private final LabDataStore dataStore;
+    private final String authenticatedUsername;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2)).build();
     private final AtomicLong lastRequestLogNanos = new AtomicLong();
@@ -111,7 +114,15 @@ public final class DashboardController implements AutoCloseable {
     private String detectedClientIp;
 
     public DashboardController(ServerConfig config) {
+        this(config, null, "local-user");
+    }
+
+    public DashboardController(ServerConfig config, LabDataStore dataStore,
+                               String authenticatedUsername) {
         this.config = config;
+        this.dataStore = dataStore;
+        this.authenticatedUsername = authenticatedUsername == null || authenticatedUsername.isBlank()
+                ? "local-user" : authenticatedUsername.trim();
         this.serverPort = new SimpleIntegerProperty(config.getServerPort());
         this.autoDefense.set(config.isAutoDefense());
         this.dosDetector = new DoSDetector(config);
@@ -149,6 +160,12 @@ public final class DashboardController implements AutoCloseable {
             startedAt = Instant.now();
             serverRunning.set(true);
             detectionReason.set("Traffic is within configured limits");
+            if (dataStore != null) {
+                dataStore.startSession(authenticatedUsername, bindAddress.getHostAddress(), port,
+                        config, protectionSnapshot());
+                dataStore.saveServerSettings("SERVER_START", authenticatedUsername,
+                        config, protectionSnapshot());
+            }
             appendLog("INFO", "SERVER", "SERVER_STARTED",
                     "Listening on 0.0.0.0:" + port + "; lab endpoint http://"
                             + bindAddress.getHostAddress() + ":" + port + "/");
@@ -201,6 +218,7 @@ public final class DashboardController implements AutoCloseable {
         detectedClientIp = null;
         detectionReason.set("Server is stopped");
         appendLog("INFO", "SERVER", "SERVER_STOPPED", "TCP listener and worker pool stopped");
+        if (dataStore != null) dataStore.stopSession("USER_STOPPED");
     }
 
     /** Sends a background HTTP health request. It never opens a browser window. */
@@ -343,12 +361,21 @@ public final class DashboardController implements AutoCloseable {
             Platform.runLater(() -> appendLog(level, ip, event, description));
             return;
         }
+        Instant timestamp = Instant.now();
         String safeDescription = description == null || description.isBlank() ? "No details" : description;
         String entry = "%s | %-9s | %-15s | %-20s | %s".formatted(
                 LocalTime.now().format(CLOCK_FORMAT), level, ip, event, safeDescription);
         logs.add(entry);
         if (logs.size() > MAX_LOG_LINES) {
             logs.remove(0, logs.size() - MAX_LOG_LINES);
+        }
+        if (dataStore != null) {
+            dataStore.saveSecurityEvent(timestamp, level, ip, event, safeDescription);
+            if (isProtectionEvent(level, event)) {
+                String clientIp = ip == null || "SERVER".equalsIgnoreCase(ip) ? null : ip;
+                dataStore.saveProtectionAction(timestamp, clientIp, event,
+                        protectionActionState(event, safeDescription), safeDescription);
+            }
         }
     }
 
@@ -395,6 +422,11 @@ public final class DashboardController implements AutoCloseable {
             previousStatus = next;
             previousAttackType = detection.attackType();
         }
+        if (dataStore != null) {
+            Instant snapshotTime = Instant.now();
+            dataStore.saveTrafficSnapshot(snapshotTime, statistics, next, protectionSnapshot());
+            dataStore.saveClientTrafficSnapshots(snapshotTime, clientSnapshots);
+        }
 
         long totalNow = statistics.totalRequests();
         long successfulNow = statistics.successfulRequests();
@@ -419,6 +451,11 @@ public final class DashboardController implements AutoCloseable {
 
     private void logTransition(DoSDetector.Result detection) {
         String source = detection.clientIp() == null ? topClientIp() : detection.clientIp();
+        if (dataStore != null) {
+            dataStore.saveDetectionEvent(Instant.now(), detection.clientIp(), detection.status(),
+                    detection.attackType(), detection.reason(), detection.currentValue(),
+                    detection.threshold());
+        }
         switch (detection.status()) {
             case NORMAL -> appendLog("INFO", "SERVER", "NORMAL", "Traffic returned to normal");
             case SUSPICIOUS -> appendLog("WARNING", source, "SUSPICIOUS", detection.reason());
@@ -474,6 +511,31 @@ public final class DashboardController implements AutoCloseable {
 
     private String topClientIp() {
         return clients.isEmpty() ? "UNKNOWN" : clients.getFirst().ipAddress();
+    }
+
+    /** Persists the current configuration after a user explicitly saves it. */
+    public void saveSettingsSnapshot(String source) {
+        if (dataStore != null) {
+            dataStore.saveServerSettings(source, authenticatedUsername, config, protectionSnapshot());
+        }
+    }
+
+    private static boolean isProtectionEvent(String level, String event) {
+        if (event == null) return false;
+        return "DEFENSE".equalsIgnoreCase(level)
+                || event.contains("PROTECTION")
+                || event.contains("RATE_LIMIT")
+                || event.contains("CONNECTION_LIMIT")
+                || event.contains("BLOCK")
+                || "AUTO_DEFENSE".equals(event);
+    }
+
+    private static String protectionActionState(String event, String description) {
+        String details = description == null ? "" : description.toUpperCase();
+        if (event.contains("UNBLOCK")) return "RELEASED";
+        if (event.contains("DISABLED") || details.endsWith(" OFF")) return "DISABLED";
+        if (event.contains("ENABLED") || details.endsWith(" ON")) return "ENABLED";
+        return "APPLIED";
     }
 
     private static String findPrivateIpv4() {
@@ -551,7 +613,9 @@ public final class DashboardController implements AutoCloseable {
     @Override
     public void close() {
         timeline.stop();
+        if (serverRunning.get()) stopServer();
         webServer.close();
+        if (dataStore != null) dataStore.close();
     }
 
     private final class ServerObserver implements WebServer.Observer {

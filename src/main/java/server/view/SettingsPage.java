@@ -354,6 +354,7 @@ public final class SettingsPage extends VBox {
                 controller.setProtectionEnabled(protectionToggle.isSelected());
             }
             controller.setAutoDefense(autoDefenseToggle.isSelected());
+            controller.saveSettingsSnapshot("SETTINGS_PAGE");
             controller.appendLog("INFO", "SERVER", "SETTINGS_SAVED",
                     "Detection and protection configuration updated");
             String suffix = controller.serverRunningProperty().get()

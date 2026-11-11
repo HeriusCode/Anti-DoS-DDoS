@@ -381,6 +381,7 @@ public final class ProtectionPage extends VBox {
             controller.getConfig().setRateLimit(rate);
             controller.getConfig().setMaxActiveConnections(connections);
             controller.getConfig().setBlockDuration(java.time.Duration.ofSeconds(seconds));
+            controller.saveSettingsSnapshot("PROTECTION_PAGE");
             controller.appendLog("INFO", "SERVER", "PROTECTION_SETTINGS", "Protection settings updated");
         } catch (IllegalArgumentException exception) {
             controller.appendLog("ERROR", "SERVER", "INVALID_SETTINGS", exception.getMessage());
